@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "question": "Tell me about yourself",
+    "category": "HR",
+    "difficulty": "easy"
+  },
+  {
+    "id": 2,
+    "question": "What is REST API?",
+    "category": "Technical",
+    "difficulty": "medium"
+  },
+  {
+    "id": 3,
+    "question": "What are your strengths?",
+    "category": "HR",
+    "difficulty": "easy"
+  }
+]
