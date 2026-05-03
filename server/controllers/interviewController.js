@@ -1,29 +1,83 @@
-const { getFeedback } = require("../services/aiService");
+const Result = require("../models/Result");
 
-const generateFeedback = async (req, res) => {
+// 🔥 SUMMARY FUNCTION
+const generateSummary = (results) => {
+  let totalScore = 0;
+  let strengths = [];
+  let weaknesses = [];
+
+  results.forEach((item) => {
+    const match = item.feedback?.match(/(\d+)\/10/);
+    const score = match ? parseInt(match[1]) : 5;
+
+    totalScore += score;
+
+    if (score >= 7) {
+      strengths.push(item.question);
+    } else {
+      weaknesses.push(item.question);
+    }
+  });
+
+  const averageScore = results.length
+    ? (totalScore / results.length).toFixed(1)
+    : 0;
+
+  return {
+    averageScore,
+    strengths:
+      strengths.length > 0
+        ? strengths.join(", ")
+        : "No strong answers yet",
+    weaknesses:
+      weaknesses.length > 0
+        ? weaknesses.join(", ")
+        : "No weak areas",
+    suggestions:
+      "Try to give structured answers with examples and clarity.",
+  };
+};
+
+// 🔥 MAIN CONTROLLER (JWT PROTECTED)
+const generateFeedback = async (req, res, next) => {
   try {
-    const { answers } = req.body;
+    const { answers, category } = req.body;
 
-    if (!answers) {
-      return res.status(400).json({ message: "No answers provided" });
+    // 🚨 IMPORTANT: user must exist (from protect middleware)
+    if (!req.user) {
+      return res.status(401).json({ message: "Not authorized" });
     }
 
-    const results = [];
+    // ✅ GENERATE FEEDBACK
+    const results = answers.map((item) => ({
+      question: item.question,
+      answer: item.answer,
+      feedback:
+        item.answer.length > 20
+          ? "Good answer. Try to add more structure. Score: 7/10"
+          : "Answer is too short. Try to explain more clearly. Score: 5/10",
+    }));
 
-    for (let item of answers) {
-      const feedback = await getFeedback(item.question, item.answer);
+    // ✅ GENERATE SUMMARY
+    const summary = generateSummary(results);
 
-      results.push({
-        question: item.question,
-        answer: item.answer,
-        feedback,
-      });
-    }
+    // ✅ SAVE TO DATABASE WITH USER
+    const savedResult = await Result.create({
+      user: req.user._id, // 🔥 JWT USER LINK
+      answers: results,
+      summary,
+      category,
+    });
 
-    res.json({ results });
+    // ✅ RESPONSE
+    res.json({
+      results,
+      summary,
+      id: savedResult._id,
+    });
   } catch (error) {
-    console.error("🔥 BACKEND ERROR:", error);
-    res.status(500).json({ message: "AI error" });
+    console.error(error);
+    next(error);
   }
 };
 

@@ -1,20 +1,9 @@
 [
-  {
-    "id": 1,
-    "question": "Tell me about yourself",
-    "category": "HR",
-    "difficulty": "easy"
-  },
-  {
-    "id": 2,
-    "question": "What is REST API?",
-    "category": "Technical",
-    "difficulty": "medium"
-  },
-  {
-    "id": 3,
-    "question": "What are your strengths?",
-    "category": "HR",
-    "difficulty": "easy"
-  }
+  { "category": "hr", "question": "Tell me about yourself" },
+  { "category": "hr", "question": "What are your strengths?" },
+  { "category": "hr", "question": "Why should we hire you?" },
+
+  { "category": "technical", "question": "What is REST API?" },
+  { "category": "technical", "question": "Explain React lifecycle" },
+  { "category": "technical", "question": "What is middleware in Express?" }
 ]
