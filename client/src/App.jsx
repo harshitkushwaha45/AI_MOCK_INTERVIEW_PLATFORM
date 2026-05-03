@@ -6,6 +6,7 @@ import ResultDetail from "./pages/ResultDetail";
 import useSpeechToText from "./hooks/useSpeechToText";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import ResumeUpload from "./components/ResumeUpload";
 
 function App() {
   const primaryButtonStyle = {
@@ -39,6 +40,7 @@ function App() {
   const [selectedResultId, setSelectedResultId] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authMode, setAuthMode] = useState("login");
+  const [showUpload, setShowUpload] = useState(true);
 
   const { isListening, startListening, stopListening } = useSpeechToText();
 
@@ -167,6 +169,91 @@ function App() {
 
         <Dashboard onSelect={setSelectedResultId} />
       </>
+    );
+  }
+
+  if (showUpload) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background:
+            "radial-gradient(circle at top left, rgba(14,165,233,0.20), transparent 28%), radial-gradient(circle at bottom right, rgba(99,102,241,0.18), transparent 28%), linear-gradient(160deg, #020617 0%, #071226 52%, #020617 100%)",
+          color: "white",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          position: "relative",
+          overflow: "hidden",
+          padding: "32px 24px",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background:
+              "linear-gradient(rgba(148,163,184,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.06) 1px, transparent 1px)",
+            backgroundSize: "42px 42px",
+            maskImage: "linear-gradient(to bottom, rgba(0,0,0,0.7), transparent)",
+            pointerEvents: "none",
+          }}
+        />
+
+        <div
+          style={{
+            position: "absolute",
+            top: "24px",
+            left: "24px",
+            right: "24px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "12px",
+            flexWrap: "wrap",
+            zIndex: 2,
+          }}
+        >
+          <div
+            style={{
+              padding: "10px 14px",
+              borderRadius: "999px",
+              background: "rgba(15, 23, 42, 0.78)",
+              border: "1px solid rgba(148,163,184,0.14)",
+              color: "#cbd5e1",
+              fontSize: "13px",
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+            }}
+          >
+            AI Interview Arena
+          </div>
+
+          <button
+            onClick={() => {
+              localStorage.removeItem("token");
+              window.location.reload();
+            }}
+            style={{
+              padding: "12px 18px",
+              border: "1px solid rgba(248, 113, 113, 0.28)",
+              borderRadius: "999px",
+              background: "rgba(127, 29, 29, 0.28)",
+              color: "#fecaca",
+              fontWeight: 700,
+              cursor: "pointer",
+              boxShadow: "0 14px 30px rgba(127, 29, 29, 0.18)",
+            }}
+          >
+            Logout
+          </button>
+        </div>
+
+        <ResumeUpload
+          onAnalysisComplete={() => {}}
+          onSkip={() => setShowUpload(false)}
+        />
+      </div>
     );
   }
 

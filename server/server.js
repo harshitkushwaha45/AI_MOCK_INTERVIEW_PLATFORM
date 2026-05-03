@@ -18,11 +18,14 @@ const interviewRoutes = require("./routes/interviewRoutes");
 const questionRoutes = require("./routes/questionRoutes");
 const resultRoutes = require("./routes/resultRoutes");
 const authRoutes = require("./routes/authRoutes");
+const resumeRoutes = require("./routes/resumeRoutes");
+
 
 app.use("/api/interview", interviewRoutes);
 app.use("/api/questions", questionRoutes);
 app.use("/api/results", resultRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/resume", resumeRoutes);
 
 // ✅ OPTIONAL HEALTH CHECK (VERY USEFUL)
 app.get("/", (req, res) => {
