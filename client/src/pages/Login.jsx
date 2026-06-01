@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BASE_URL } from "../api";
+import { BASE_URL, readJson } from "../api";
 
 function Login({ onSignupClick, onLoginSuccess }) {
   const [email, setEmail] = useState("");
@@ -15,7 +15,7 @@ function Login({ onSignupClick, onLoginSuccess }) {
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await res.json();
+      const data = await readJson(res);
 
       if (!res.ok) {
         alert(data.message || "Login failed");
@@ -27,7 +27,7 @@ function Login({ onSignupClick, onLoginSuccess }) {
 
     } catch (err) {
       console.error(err);
-      alert("Server error");
+      alert(err.message || "Server error");
     }
   };
 

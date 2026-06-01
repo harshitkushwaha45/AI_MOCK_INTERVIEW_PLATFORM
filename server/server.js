@@ -1,5 +1,7 @@
 const express = require("express");
 const cors = require("cors");
+const fs = require("fs");
+const path = require("path");
 require("dotenv").config();
 
 const connectDB = require("./config/db");
@@ -27,10 +29,28 @@ app.use("/api/results", resultRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/resume", resumeRoutes);
 
-// ✅ OPTIONAL HEALTH CHECK (VERY USEFUL)
-app.get("/", (req, res) => {
-  res.send("🚀 AI Mock Interview API is running...");
+app.get("/api/health", (req, res) => {
+  res.json({ message: "AI Mock Interview API is running" });
 });
+
+const clientDistPath = path.join(__dirname, "..", "client", "dist");
+const clientIndexPath = path.join(clientDistPath, "index.html");
+
+if (fs.existsSync(clientIndexPath)) {
+  app.use(express.static(clientDistPath));
+
+  app.get(/^\/(?!api(?:\/|$)).*/, (req, res, next) => {
+    res.sendFile(clientIndexPath, (err) => {
+      if (err) {
+        next(err);
+      }
+    });
+  });
+} else {
+  app.get("/", (req, res) => {
+    res.json({ message: "AI Mock Interview API is running" });
+  });
+}
 
 // 🔥 GLOBAL ERROR HANDLER (always last)
 const errorHandler = require("./middleware/errorMiddleware");

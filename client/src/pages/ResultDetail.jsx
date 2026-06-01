@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { authFetch } from "../api";
+import { authFetch, readJson } from "../api";
 import ScoreChart from "../components/ScoreChart";
 import SkillAnalyticsChart from "../components/SkillAnalyticsChart";
 
@@ -23,7 +23,7 @@ function ResultDetail({ resultId, onBack }) {
     const fetchData = async () => {
       try {
         const res = await authFetch(`/api/results/${resultId}`);
-        const data = await res.json();
+        const data = await readJson(res);
         setData(data);
       } catch (err) {
         console.error(err);

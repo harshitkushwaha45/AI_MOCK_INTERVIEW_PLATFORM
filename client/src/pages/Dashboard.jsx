@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { authFetch } from "../api";
+import { authFetch, readJson } from "../api";
 import SkillAnalyticsChart from "../components/SkillAnalyticsChart";
 import { SKILL_LABELS } from "../utils/skillLabels";
 
@@ -32,8 +32,8 @@ function Dashboard({ onSelect }) {
           authFetch("/api/results"),
           authFetch("/api/results/analytics/skills"),
         ]);
-        const resultsData = await resultsRes.json();
-        const analyticsData = await analyticsRes.json();
+        const resultsData = await readJson(resultsRes);
+        const analyticsData = await readJson(analyticsRes);
 
         if (!resultsRes.ok) {
           throw new Error(resultsData.message || "Could not load interview history");

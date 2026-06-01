@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BASE_URL } from "../api";
+import { BASE_URL, readJson } from "../api";
 
 function ResumeUpload({ onAnalysisComplete, onSkip }) {
   const [file, setFile] = useState(null);
@@ -34,7 +34,7 @@ function ResumeUpload({ onAnalysisComplete, onSkip }) {
         body: formData,
       });
 
-      const data = await res.json();
+      const data = await readJson(res);
 
       if (!res.ok) {
         throw new Error(data.message || "Upload failed");

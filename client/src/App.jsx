@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import { BASE_URL, authFetch } from "./api";
+import { BASE_URL, authFetch, readJson } from "./api";
 import ScoreChart from "./components/ScoreChart";
 import EmotionCamera from "./components/EmotionCamera";
 import Dashboard from "./pages/Dashboard";
@@ -115,7 +115,7 @@ function App() {
     }
 
     fetch(`${BASE_URL}/api/questions?category=${category}`)
-      .then((res) => res.json())
+      .then((res) => readJson(res))
       .then((data) => {
         setQuestions(Array.isArray(data) ? data : []);
         setCurrentIndex(0);
