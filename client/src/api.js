@@ -1,4 +1,4 @@
-export const BASE_URL = "http://localhost:5000";
+export const BASE_URL = "https://ai-mock-interview-platform-1-ofb2.onrender.com";
 
 export const authFetch = (url, options = {}) => {
   return fetch(`${BASE_URL}${url}`, {
