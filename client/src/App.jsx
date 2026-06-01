@@ -1,12 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { BASE_URL, authFetch } from "./api";
 import ScoreChart from "./components/ScoreChart";
+import EmotionCamera from "./components/EmotionCamera";
 import Dashboard from "./pages/Dashboard";
 import ResultDetail from "./pages/ResultDetail";
 import useSpeechToText from "./hooks/useSpeechToText";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ResumeUpload from "./components/ResumeUpload";
+
+const QUESTION_TIME_LIMIT = 120;
+const EMPTY_EMOTION_METRICS = {
+  confidenceScore: 0,
+  eyeContactScore: 0,
+  faceVisibilityScore: 0,
+  emotion: "Unknown",
+};
 
 function App() {
   const primaryButtonStyle = {
@@ -23,46 +32,88 @@ function App() {
     localStorage.removeItem("interviewResults");
     setAnswers([]);
     setSummary(null);
+    setFeedbackError("");
+    setEmotionMetrics(EMPTY_EMOTION_METRICS);
     setIsFinished(false);
     setCurrentIndex(0);
     setAnswer("");
-    setTimeLeft(30);
+    setTimeLeft(QUESTION_TIME_LIMIT);
   };
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answer, setAnswer] = useState("");
   const [answers, setAnswers] = useState([]);
   const [isFinished, setIsFinished] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(30);
+  const [timeLeft, setTimeLeft] = useState(QUESTION_TIME_LIMIT);
   const [category, setCategory] = useState("hr");
   const [summary, setSummary] = useState(null);
+  const [feedbackError, setFeedbackError] = useState("");
+  const [emotionMetrics, setEmotionMetrics] = useState(EMPTY_EMOTION_METRICS);
   const [showDashboard, setShowDashboard] = useState(false);
   const [selectedResultId, setSelectedResultId] = useState(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() =>
+    Boolean(localStorage.getItem("token"))
+  );
   const [authMode, setAuthMode] = useState("login");
   const [showUpload, setShowUpload] = useState(true);
+  const [isVoiceMuted, setIsVoiceMuted] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState(() =>
+    "speechSynthesis" in window ? "Voice ready" : "Voice unavailable"
+  );
+  const spokenQuestionKeyRef = useRef("");
 
   const { isListening, startListening, stopListening } = useSpeechToText();
 
-  // 🔐 CHECK LOGIN
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    setIsAuthenticated(!!token);
-  }, []);
+  const currentQuestionText = questions[currentIndex]?.question || "";
+
+  const stopQuestionSpeech = () => {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+  };
+
+  const toggleVoiceMute = () => {
+    setIsVoiceMuted((prev) => {
+      const nextMuted = !prev;
+
+      if (!prev) {
+        stopQuestionSpeech();
+        setVoiceStatus("Voice muted");
+      } else {
+        spokenQuestionKeyRef.current = "";
+        setVoiceStatus("Voice ready");
+      }
+
+      return nextMuted;
+    });
+  };
 
   // LOAD SAVED RESULTS
   useEffect(() => {
     const saved = localStorage.getItem("interviewResults");
     if (saved) {
-      const parsed = JSON.parse(saved);
-      setAnswers(parsed.results || []);
-      setSummary(parsed.summary || null);
-      setIsFinished(true);
+      try {
+        const parsed = JSON.parse(saved);
+
+        if (Array.isArray(parsed?.results) && parsed.results.length && parsed?.summary) {
+          setAnswers(parsed.results);
+          setSummary(parsed.summary);
+          setIsFinished(true);
+        } else {
+          localStorage.removeItem("interviewResults");
+        }
+      } catch {
+        localStorage.removeItem("interviewResults");
+      }
     }
   }, []);
 
   // FETCH QUESTIONS
   useEffect(() => {
+    if (showUpload || category === "resume") {
+      return;
+    }
+
     fetch(`${BASE_URL}/api/questions?category=${category}`)
       .then((res) => res.json())
       .then((data) => {
@@ -70,27 +121,13 @@ function App() {
         setCurrentIndex(0);
         setAnswers([]);
         setSummary(null);
+        setFeedbackError("");
+        setEmotionMetrics(EMPTY_EMOTION_METRICS);
         setIsFinished(false);
-        setTimeLeft(30);
+        setTimeLeft(QUESTION_TIME_LIMIT);
       })
       .catch(console.error);
-  }, [category]);
-
-  // TIMER
-  useEffect(() => {
-    if (isFinished) return;
-
-    if (timeLeft === 0) {
-      handleNext();
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      setTimeLeft((prev) => prev - 1);
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [timeLeft, isFinished]);
+  }, [category, showUpload]);
 
   // NEXT
   const handleNext = async () => {
@@ -104,7 +141,9 @@ function App() {
 
     setAnswers(updatedAnswers);
     setAnswer("");
-    setTimeLeft(30);
+    setFeedbackError("");
+    setTimeLeft(QUESTION_TIME_LIMIT);
+    stopQuestionSpeech();
 
     if (currentIndex < questions.length - 1) {
       setCurrentIndex(currentIndex + 1);
@@ -112,20 +151,136 @@ function App() {
       try {
         const res = await authFetch("/api/interview/feedback", {
           method: "POST",
-          body: JSON.stringify({ answers: updatedAnswers, category }),
+          body: JSON.stringify({
+            answers: updatedAnswers,
+            category,
+            emotionMetrics,
+          }),
         });
 
-        const data = await res.json();
+        const text = await res.text();
+        let data = {};
+
+        try {
+          data = text ? JSON.parse(text) : {};
+        } catch {
+          throw new Error("Server returned an invalid feedback response");
+        }
+
+        if (!res.ok) {
+          throw new Error(data.message || "Feedback generation failed");
+        }
 
         localStorage.setItem("interviewResults", JSON.stringify(data));
 
         setAnswers(data.results || []);
         setSummary(data.summary || null);
+        setEmotionMetrics(data.emotionMetrics || emotionMetrics);
         setIsFinished(true);
       } catch (err) {
         console.error(err);
+        setFeedbackError(
+          err.message || "Could not generate feedback. Please try finishing again."
+        );
       }
     }
+  };
+
+  const handleTimerExpired = useEffectEvent(() => {
+    handleNext();
+  });
+
+  // TIMER
+  useEffect(() => {
+    if (isFinished) return;
+
+    if (timeLeft === 0) {
+      handleTimerExpired();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setTimeLeft((prev) => prev - 1);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [timeLeft, isFinished]);
+
+  useEffect(() => {
+    if (!currentQuestionText || showUpload || isFinished) {
+      return;
+    }
+
+    if (!("speechSynthesis" in window)) {
+      return;
+    }
+
+    if (isVoiceMuted) {
+      stopQuestionSpeech();
+      return;
+    }
+
+    const questionKey = `${currentIndex}:${currentQuestionText}`;
+
+    if (spokenQuestionKeyRef.current === questionKey) {
+      return;
+    }
+
+    stopQuestionSpeech();
+
+    const utterance = new SpeechSynthesisUtterance(currentQuestionText);
+    utterance.rate = 0.95;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    utterance.onstart = () => setVoiceStatus("Reading question aloud");
+    utterance.onend = () => setVoiceStatus("Question read");
+    utterance.onerror = () => setVoiceStatus("Voice stopped");
+
+    spokenQuestionKeyRef.current = questionKey;
+    window.speechSynthesis.speak(utterance);
+
+    return () => {
+      utterance.onstart = null;
+      utterance.onend = null;
+      utterance.onerror = null;
+      stopQuestionSpeech();
+    };
+  }, [
+    currentIndex,
+    currentQuestionText,
+    isFinished,
+    isVoiceMuted,
+    showUpload,
+  ]);
+
+  useEffect(() => {
+    return () => stopQuestionSpeech();
+  }, []);
+
+  const startResumeInterview = (resumeResult) => {
+    const resumeQuestions = Array.isArray(resumeResult?.questions)
+      ? resumeResult.questions
+      : [];
+
+    if (!resumeQuestions.length) {
+      console.error("No resume questions were returned from the server.");
+      return;
+    }
+
+    localStorage.removeItem("interviewResults");
+    setQuestions(resumeQuestions);
+    setCategory("resume");
+    setCurrentIndex(0);
+    setAnswer("");
+    setAnswers([]);
+    setSummary(null);
+    setFeedbackError("");
+    setEmotionMetrics(EMPTY_EMOTION_METRICS);
+    setIsFinished(false);
+    setTimeLeft(QUESTION_TIME_LIMIT);
+    spokenQuestionKeyRef.current = "";
+    setShowUpload(false);
   };
 
   // 🔐 LOGIN SCREEN
@@ -250,7 +405,7 @@ function App() {
         </div>
 
         <ResumeUpload
-          onAnalysisComplete={() => {}}
+          onAnalysisComplete={startResumeInterview}
           onSkip={() => setShowUpload(false)}
         />
       </div>
@@ -331,6 +486,62 @@ if (isFinished) {
         </div>
       )}
 
+      <div
+        style={{
+          background: "#1e293b",
+          padding: "20px",
+          borderRadius: "12px",
+          width: "100%",
+          maxWidth: "700px",
+          marginBottom: "20px",
+          boxShadow: "0 5px 20px rgba(0,0,0,0.3)",
+        }}
+      >
+        <h2 style={{ marginBottom: "14px" }}>Camera Confidence</h2>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+            gap: "12px",
+          }}
+        >
+          {[
+            ["Confidence", emotionMetrics.confidenceScore],
+            ["Eye Contact", emotionMetrics.eyeContactScore],
+            ["Face Visible", emotionMetrics.faceVisibilityScore],
+          ].map(([label, value]) => (
+            <div
+              key={label}
+              style={{
+                padding: "14px",
+                borderRadius: "10px",
+                background: "rgba(15, 23, 42, 0.72)",
+                border: "1px solid rgba(148,163,184,0.12)",
+              }}
+            >
+              <p style={{ margin: 0, color: "#94a3b8", fontSize: "12px" }}>{label}</p>
+              <p style={{ margin: "8px 0 0", fontSize: "24px", fontWeight: 800 }}>
+                {value}
+                <span style={{ fontSize: "12px", color: "#cbd5e1" }}>/100</span>
+              </p>
+            </div>
+          ))}
+          <div
+            style={{
+              padding: "14px",
+              borderRadius: "10px",
+              background: "rgba(15, 23, 42, 0.72)",
+              border: "1px solid rgba(148,163,184,0.12)",
+            }}
+          >
+            <p style={{ margin: 0, color: "#94a3b8", fontSize: "12px" }}>Dominant Emotion</p>
+            <p style={{ margin: "8px 0 0", fontSize: "24px", fontWeight: 800 }}>
+              {emotionMetrics.emotion}
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* ANSWERS */}
       {answers.map((item, i) => (
         <div
@@ -365,6 +576,23 @@ if (isFinished) {
         }}
       >
         Restart Interview
+      </button>
+
+      <button
+        onClick={() => setShowDashboard(true)}
+        style={{
+          marginTop: "14px",
+          padding: "14px 24px",
+          fontSize: "15px",
+          border: "1px solid rgba(56, 189, 248, 0.24)",
+          borderRadius: "999px",
+          background: "rgba(14, 165, 233, 0.16)",
+          color: "#bae6fd",
+          fontWeight: 800,
+          cursor: "pointer",
+        }}
+      >
+        Open Dashboard
       </button>
     </div>
   );
@@ -532,6 +760,76 @@ if (isFinished) {
 
         <div
           style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "14px",
+            flexWrap: "wrap",
+            padding: "14px 16px",
+            borderRadius: "22px",
+            background:
+              "linear-gradient(135deg, rgba(56, 189, 248, 0.13), rgba(34, 197, 94, 0.08))",
+            border: "1px solid rgba(125, 211, 252, 0.18)",
+            marginBottom: "22px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div
+              style={{
+                width: "12px",
+                height: "12px",
+                borderRadius: "999px",
+                background: isVoiceMuted
+                  ? "#f87171"
+                  : voiceStatus === "Reading question aloud"
+                  ? "#22c55e"
+                  : "#38bdf8",
+                boxShadow: isVoiceMuted
+                  ? "0 0 18px rgba(248, 113, 113, 0.45)"
+                  : "0 0 18px rgba(56, 189, 248, 0.45)",
+              }}
+            />
+
+            <div>
+              <p
+                style={{
+                  margin: 0,
+                  color: "#f8fafc",
+                  fontSize: "14px",
+                  fontWeight: 800,
+                }}
+              >
+                AI Voice
+              </p>
+              <p style={{ margin: "4px 0 0", color: "#cbd5e1", fontSize: "13px" }}>
+                {voiceStatus}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={toggleVoiceMute}
+            aria-pressed={isVoiceMuted}
+            style={{
+              padding: "10px 16px",
+              borderRadius: "999px",
+              border: isVoiceMuted
+                ? "1px solid rgba(248, 113, 113, 0.28)"
+                : "1px solid rgba(56, 189, 248, 0.24)",
+              background: isVoiceMuted
+                ? "rgba(127, 29, 29, 0.28)"
+                : "rgba(14, 165, 233, 0.16)",
+              color: isVoiceMuted ? "#fecaca" : "#bae6fd",
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            {isVoiceMuted ? "Unmute Voice" : "Mute Voice"}
+          </button>
+        </div>
+
+        <div
+          style={{
             height: "10px",
             borderRadius: "999px",
             background: "rgba(15, 23, 42, 0.95)",
@@ -542,13 +840,13 @@ if (isFinished) {
         >
           <div
             style={{
-              width: `${(timeLeft / 30) * 100}%`,
+              width: `${(timeLeft / QUESTION_TIME_LIMIT) * 100}%`,
               height: "100%",
               borderRadius: "999px",
               background:
-                timeLeft > 15
+                timeLeft > QUESTION_TIME_LIMIT / 2
                   ? "linear-gradient(90deg, #22c55e, #38bdf8)"
-                  : timeLeft > 7
+                  : timeLeft > QUESTION_TIME_LIMIT / 4
                   ? "linear-gradient(90deg, #f59e0b, #f97316)"
                   : "linear-gradient(90deg, #ef4444, #fb7185)",
               transition: "width 1s linear",
@@ -588,6 +886,7 @@ if (isFinished) {
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
+            disabled={category === "resume"}
             style={{
               padding: "10px 16px",
               borderRadius: "999px",
@@ -599,9 +898,13 @@ if (isFinished) {
               textTransform: "uppercase",
               letterSpacing: "0.08em",
               outline: "none",
-              cursor: "pointer",
+              cursor: category === "resume" ? "not-allowed" : "pointer",
+              opacity: category === "resume" ? 0.82 : 1,
             }}
           >
+            {category === "resume" && (
+              <option value="resume">Resume Based</option>
+            )}
             <option value="hr">HR Interview</option>
             <option value="technical">Technical Interview</option>
           </select>
@@ -671,6 +974,25 @@ if (isFinished) {
               minHeight: "150px",
             }}
           />
+
+          <EmotionCamera onMetricsChange={setEmotionMetrics} />
+
+          {feedbackError && (
+            <div
+              style={{
+                marginTop: "14px",
+                padding: "14px 16px",
+                borderRadius: "16px",
+                background: "rgba(127, 29, 29, 0.24)",
+                border: "1px solid rgba(248, 113, 113, 0.24)",
+                color: "#fecaca",
+                fontSize: "14px",
+                lineHeight: 1.5,
+              }}
+            >
+              {feedbackError}
+            </div>
+          )}
 
           <div
             style={{

@@ -27,7 +27,7 @@ function ScoreChart({ answers = [] }) {
 
     let match = item.feedback.match(/(\d+)\s*\/\s*10/);
     if (!match) {
-      match = item.feedback.match(/score\s*[:\-]?\s*(\d+)/i);
+      match = item.feedback.match(/score\s*[:-]?\s*(\d+)/i);
     }
 
     return match ? parseInt(match[1]) : 0;

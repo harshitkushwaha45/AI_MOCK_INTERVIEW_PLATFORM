@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { authFetch } from "../api";
+import SkillAnalyticsChart from "../components/SkillAnalyticsChart";
+import { SKILL_LABELS } from "../utils/skillLabels";
 
 function Dashboard({ onSelect }) {
   const [results, setResults] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const averageScore = results.length
     ? (
         results.reduce(
@@ -12,18 +16,44 @@ function Dashboard({ onSelect }) {
         ) / results.length
       ).toFixed(1)
     : "0.0";
+  const averageConfidence = results.length
+    ? Math.round(
+        results.reduce(
+          (sum, item) => sum + (Number(item.emotionMetrics?.confidenceScore) || 0),
+          0
+        ) / results.length
+      )
+    : 0;
 
   useEffect(() => {
-    authFetch("/api/results")
-      .then((res) => res.json())
-      .then((data) => {
-        setResults(Array.isArray(data) ? data : []);
+    const loadDashboard = async () => {
+      try {
+        const [resultsRes, analyticsRes] = await Promise.all([
+          authFetch("/api/results"),
+          authFetch("/api/results/analytics/skills"),
+        ]);
+        const resultsData = await resultsRes.json();
+        const analyticsData = await analyticsRes.json();
+
+        if (!resultsRes.ok) {
+          throw new Error(resultsData.message || "Could not load interview history");
+        }
+
+        if (!analyticsRes.ok) {
+          throw new Error(analyticsData.message || "Could not load skill analytics");
+        }
+
+        setResults(Array.isArray(resultsData) ? resultsData : []);
+        setAnalytics(analyticsData || null);
         setLoading(false);
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error(err);
+        setError(err.message || "Dashboard failed to load");
         setLoading(false);
-      });
+      }
+    };
+
+    loadDashboard();
   }, []);
 
   return (
@@ -117,6 +147,22 @@ function Dashboard({ onSelect }) {
                 {averageScore}/10
               </p>
             </div>
+
+            <div
+              style={{
+                minWidth: "150px",
+                padding: "18px 20px",
+                borderRadius: "22px",
+                background: "rgba(15, 23, 42, 0.84)",
+                border: "1px solid rgba(34, 197, 94, 0.16)",
+                boxShadow: "0 16px 40px rgba(2, 6, 23, 0.35)",
+              }}
+            >
+              <p style={{ margin: 0, color: "#94a3b8", fontSize: "12px" }}>Avg Confidence</p>
+              <p style={{ margin: "8px 0 0", fontSize: "28px", fontWeight: 800 }}>
+                {averageConfidence}/100
+              </p>
+            </div>
           </div>
         </div>
 
@@ -134,6 +180,19 @@ function Dashboard({ onSelect }) {
           >
             Loading interview history...
           </div>
+        ) : error ? (
+          <div
+            style={{
+              padding: "40px",
+              textAlign: "center",
+              color: "#fecaca",
+              background: "rgba(127, 29, 29, 0.22)",
+              borderRadius: "24px",
+              border: "1px solid rgba(248,113,113,0.22)",
+            }}
+          >
+            {error}
+          </div>
         ) : results.length === 0 ? (
           <div
             style={{
@@ -148,15 +207,28 @@ function Dashboard({ onSelect }) {
             No interviews yet
           </div>
         ) : (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-              gap: "20px",
-            }}
-          >
-            {results.map((item) => {
+          <>
+            <SkillAnalyticsSummary analytics={analytics} />
+
+            <div style={{ margin: "24px 0" }}>
+              <SkillAnalyticsChart
+                scores={analytics?.averages || {}}
+                progress={analytics?.progress || []}
+                title="Skill Progress Across Interviews"
+              />
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                gap: "20px",
+              }}
+            >
+              {results.map((item) => {
               const score = Number(item.summary?.averageScore) || 0;
+              const confidenceScore = Number(item.emotionMetrics?.confidenceScore) || 0;
+              const skillScores = item.skillAnalytics?.skillScores || {};
               const scoreColor =
                 score >= 7 ? "#22c55e" : score >= 5 ? "#f59e0b" : "#ef4444";
               const label =
@@ -261,6 +333,39 @@ function Dashboard({ onSelect }) {
                   <p style={{ margin: 0, color: "#cbd5e1", fontSize: "14px" }}>
                     {label}
                   </p>
+                  <p style={{ margin: "10px 0 0", color: "#cbd5e1", fontSize: "14px" }}>
+                    Confidence: <strong>{confidenceScore}/100</strong>
+                    {" · "}
+                    Emotion: <strong>{item.emotionMetrics?.emotion || "Unknown"}</strong>
+                  </p>
+                  <div
+                    style={{
+                      marginTop: "14px",
+                      display: "flex",
+                      gap: "8px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    {Object.entries(skillScores)
+                      .sort((a, b) => Number(b[1]) - Number(a[1]))
+                      .slice(0, 3)
+                      .map(([skill, value]) => (
+                        <span
+                          key={skill}
+                          style={{
+                            padding: "7px 9px",
+                            borderRadius: "999px",
+                            background: "rgba(56, 189, 248, 0.12)",
+                            border: "1px solid rgba(56, 189, 248, 0.16)",
+                            color: "#bae6fd",
+                            fontSize: "12px",
+                            fontWeight: 800,
+                          }}
+                        >
+                          {SKILL_LABELS[skill] || skill}: {value}/10
+                        </span>
+                      ))}
+                  </div>
                   <p style={{ margin: "10px 0 0", fontSize: "12px", color: "#94a3b8" }}>
                     {new Date(item.createdAt).toLocaleString()}
                   </p>
@@ -294,10 +399,65 @@ function Dashboard({ onSelect }) {
                   </div>
                 </div>
               );
-            })}
-          </div>
+              })}
+            </div>
+          </>
         )}
       </div>
+    </div>
+  );
+}
+
+function SkillAnalyticsSummary({ analytics }) {
+  const strengths = analytics?.strengths || [];
+  const weakAreas = analytics?.weakAreas || [];
+  const recommendations = analytics?.recommendations || [];
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+        gap: "18px",
+      }}
+    >
+      <InsightPanel title="Strengths" items={strengths.map((item) => item.label || item)} tone="good" />
+      <InsightPanel title="Weak Areas" items={weakAreas.map((item) => item.label || item)} tone="warn" />
+      <InsightPanel title="Recommendations" items={recommendations} tone="info" />
+    </div>
+  );
+}
+
+function InsightPanel({ title, items, tone }) {
+  const color = tone === "good" ? "#86efac" : tone === "warn" ? "#fcd34d" : "#7dd3fc";
+
+  return (
+    <div
+      style={{
+        padding: "20px",
+        borderRadius: "22px",
+        background: "rgba(15, 23, 42, 0.84)",
+        border: `1px solid ${color}33`,
+        boxShadow: "0 16px 40px rgba(2, 6, 23, 0.28)",
+      }}
+    >
+      <p
+        style={{
+          margin: 0,
+          color,
+          textTransform: "uppercase",
+          letterSpacing: "0.12em",
+          fontSize: "12px",
+          fontWeight: 800,
+        }}
+      >
+        {title}
+      </p>
+      <ul style={{ margin: "14px 0 0", paddingLeft: "18px", color: "#e2e8f0", lineHeight: 1.7 }}>
+        {(items.length ? items : ["No data yet"]).map((item, index) => (
+          <li key={`${title}-${index}`}>{item}</li>
+        ))}
+      </ul>
     </div>
   );
 }

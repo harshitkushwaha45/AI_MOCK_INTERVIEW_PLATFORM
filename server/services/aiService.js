@@ -1,10 +1,21 @@
 const https = require("https");
+const OpenAI = require("openai");
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const GEMINI_HOST = "generativelanguage.googleapis.com";
 const GEMINI_PATH = `/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.2";
 
 const getApiKey = () => process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+const getAiProvider = () => (process.env.AI_PROVIDER || "gemini").toLowerCase();
+const SKILL_KEYS = [
+  "communication",
+  "confidence",
+  "react",
+  "node",
+  "mongodb",
+  "javascript",
+];
 
 const stripCodeFences = (text = "") =>
   text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
@@ -93,6 +104,38 @@ const requestGemini = async (prompt) => {
   });
 };
 
+const requestOpenAI = async (prompt) => {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OpenAI API key is missing");
+  }
+
+  const client = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+
+  const response = await client.responses.create({
+    model: OPENAI_MODEL,
+    instructions: "Return only valid JSON. Do not include markdown or explanations.",
+    input: prompt,
+  });
+
+  const text = (response.output_text || "").trim();
+
+  if (!text) {
+    throw new Error("OpenAI returned an empty response");
+  }
+
+  return text;
+};
+
+const requestAI = async (prompt) => {
+  if (getAiProvider() === "openai") {
+    return requestOpenAI(prompt);
+  }
+
+  return requestGemini(prompt);
+};
+
 const buildFallbackFeedback = (question, answer) => {
   const text = (answer || "").trim();
   let score = 6;
@@ -146,6 +189,147 @@ const buildFallbackSummary = (results = []) => {
   };
 };
 
+const clampSkillScore = (value) => {
+  const score = Number(value);
+
+  if (!Number.isFinite(score)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(10, Math.round(score)));
+};
+
+const titleCaseSkill = (skill) => {
+  const labels = {
+    communication: "Communication",
+    confidence: "Confidence",
+    react: "React",
+    node: "Node",
+    mongodb: "MongoDB",
+    javascript: "JavaScript",
+  };
+
+  return labels[skill] || skill;
+};
+
+const buildRecommendation = (skill) => {
+  const recommendations = {
+    communication: "Improve communication with structured answers using Situation, Action, and Result.",
+    confidence: "Practice answering aloud with steady pacing and concise examples.",
+    react: "Practice explaining React component design, hooks, state flow, and performance decisions.",
+    node: "Review Node.js and Express request flow, middleware, routing, and error handling.",
+    mongodb: "Practice MongoDB schema design, indexing, and aggregation pipelines.",
+    javascript: "Strengthen JavaScript fundamentals like closures, async code, arrays, and event loop behavior.",
+  };
+
+  return recommendations[skill] || `Practice ${titleCaseSkill(skill)} with project-specific examples.`;
+};
+
+const buildFallbackSkillAnalytics = (answers = [], results = []) => {
+  const combinedText = answers
+    .map((item) => `${item.question || ""} ${item.answer || ""}`)
+    .join(" ")
+    .toLowerCase();
+  const feedbackScores = results.map((item) => {
+    const match = item.feedback?.match(/(\d+)\s*\/\s*10/);
+    return match ? clampSkillScore(match[1]) : 5;
+  });
+  const averageAnswerScore = feedbackScores.length
+    ? feedbackScores.reduce((sum, score) => sum + score, 0) / feedbackScores.length
+    : 5;
+  const averageAnswerLength = answers.length
+    ? answers.reduce((sum, item) => sum + String(item.answer || "").length, 0) / answers.length
+    : 0;
+
+  const mentioned = (pattern) => pattern.test(combinedText);
+  const skillScores = {
+    communication: clampSkillScore(
+      averageAnswerScore + (averageAnswerLength > 120 ? 1 : averageAnswerLength < 40 ? -2 : 0)
+    ),
+    confidence: clampSkillScore(averageAnswerScore),
+    react: clampSkillScore(mentioned(/\breact|jsx|component|hook|state\b/i) ? averageAnswerScore + 1 : 4),
+    node: clampSkillScore(mentioned(/\bnode|express|api|middleware|backend\b/i) ? averageAnswerScore + 1 : 4),
+    mongodb: clampSkillScore(mentioned(/\bmongo|mongoose|schema|aggregation|database\b/i) ? averageAnswerScore + 1 : 4),
+    javascript: clampSkillScore(mentioned(/\bjavascript|async|promise|closure|event loop|array\b/i) ? averageAnswerScore + 1 : 5),
+  };
+
+  const ranked = SKILL_KEYS.map((skill) => ({
+    skill,
+    score: skillScores[skill],
+  })).sort((a, b) => b.score - a.score);
+  const strengths = ranked
+    .filter((item) => item.score >= 7)
+    .slice(0, 3)
+    .map((item) => titleCaseSkill(item.skill));
+  const weakAreas = [...ranked]
+    .reverse()
+    .filter((item) => item.score <= 6)
+    .slice(0, 3)
+    .map((item) => titleCaseSkill(item.skill));
+  const recommendations = (weakAreas.length
+    ? weakAreas
+    : ranked.slice(-2).map((item) => titleCaseSkill(item.skill))
+  ).map((label) => {
+    const skill = SKILL_KEYS.find((key) => titleCaseSkill(key) === label);
+    return buildRecommendation(skill);
+  });
+
+  return {
+    skillScores,
+    strengths: strengths.length ? strengths : [titleCaseSkill(ranked[0]?.skill || "communication")],
+    weakAreas,
+    recommendations,
+  };
+};
+
+const normalizeSkillAnalytics = (answers = [], results = [], parsed = {}) => {
+  const fallback = buildFallbackSkillAnalytics(answers, results);
+  const rawScores = parsed?.skillAnalytics?.skillScores || {};
+  const skillScores = SKILL_KEYS.reduce((acc, skill) => {
+    acc[skill] =
+      rawScores[skill] === undefined
+        ? fallback.skillScores[skill]
+        : clampSkillScore(rawScores[skill]);
+    return acc;
+  }, {});
+  const ranked = SKILL_KEYS.map((skill) => ({
+    skill,
+    score: skillScores[skill],
+  })).sort((a, b) => b.score - a.score);
+  const strengths = Array.isArray(parsed?.skillAnalytics?.strengths)
+    ? parsed.skillAnalytics.strengths
+        .filter((item) => typeof item === "string" && item.trim())
+        .slice(0, 4)
+    : ranked
+        .filter((item) => item.score >= 7)
+        .slice(0, 3)
+        .map((item) => titleCaseSkill(item.skill));
+  const weakAreas = Array.isArray(parsed?.skillAnalytics?.weakAreas)
+    ? parsed.skillAnalytics.weakAreas
+        .filter((item) => typeof item === "string" && item.trim())
+        .slice(0, 4)
+    : [...ranked]
+        .reverse()
+        .filter((item) => item.score <= 6)
+        .slice(0, 3)
+        .map((item) => titleCaseSkill(item.skill));
+  const recommendations = Array.isArray(parsed?.skillAnalytics?.recommendations)
+    ? parsed.skillAnalytics.recommendations
+        .filter((item) => typeof item === "string" && item.trim())
+        .slice(0, 5)
+    : (weakAreas.length ? weakAreas : fallback.weakAreas).map((label) => {
+        const skill = SKILL_KEYS.find((key) => titleCaseSkill(key) === label);
+        return buildRecommendation(skill);
+      });
+
+  return {
+    skillScores,
+    strengths: strengths.length ? strengths : fallback.strengths,
+    weakAreas: weakAreas.length ? weakAreas : fallback.weakAreas,
+    recommendations: recommendations.length ? recommendations : fallback.recommendations,
+  };
+};
+
 const normalizeFeedbackResults = (answers = [], parsed = {}) => {
   if (!Array.isArray(parsed.results)) {
     return answers.map((item) => buildFallbackFeedback(item.question, item.answer));
@@ -189,6 +373,19 @@ Return strict JSON only in this shape:
     "strengths": "short sentence",
     "weaknesses": "short sentence",
     "suggestions": "short sentence"
+  },
+  "skillAnalytics": {
+    "skillScores": {
+      "communication": 0,
+      "confidence": 0,
+      "react": 0,
+      "node": 0,
+      "mongodb": 0,
+      "javascript": 0
+    },
+    "strengths": ["React"],
+    "weakAreas": ["MongoDB"],
+    "recommendations": ["Practice MongoDB aggregation."]
   }
 }
 
@@ -198,16 +395,22 @@ Rules:
 - Scores must be integers from 1 to 10.
 - Make feedback practical, concise, and encouraging.
 - averageScore must be a number, not a string.
+- Skill scores must be integers from 0 to 10.
+- Score communication from clarity, structure, relevance, and completeness.
+- Score confidence from directness, specificity, and certainty in the answer.
+- Score React, Node, MongoDB, and JavaScript only from evidence in answers and questions.
+- Recommendations must be concrete practice actions, not generic advice.
 
 Input:
 ${JSON.stringify(answers)}
 `;
 
   try {
-    const responseText = await requestGemini(prompt);
+    const responseText = await requestAI(prompt);
     const parsed = extractJson(responseText);
     const results = normalizeFeedbackResults(answers, parsed);
     const fallbackSummary = buildFallbackSummary(results);
+    const skillAnalytics = normalizeSkillAnalytics(answers, results, parsed);
     const summary = {
       averageScore: Number(
         Number(parsed?.summary?.averageScore ?? fallbackSummary.averageScore).toFixed(1)
@@ -226,13 +429,14 @@ ${JSON.stringify(answers)}
           : fallbackSummary.suggestions,
     };
 
-    return { results, summary };
+    return { results, summary, skillAnalytics };
   } catch (error) {
-    console.error("Gemini feedback fallback:", error.message);
+    console.error("AI feedback fallback:", error.message);
     const results = answers.map((item) => buildFallbackFeedback(item.question, item.answer));
     return {
       results,
       summary: buildFallbackSummary(results),
+      skillAnalytics: buildFallbackSkillAnalytics(answers, results),
       error,
     };
   }
@@ -253,7 +457,7 @@ Rules:
 `;
 
   try {
-    const responseText = await requestGemini(prompt);
+    const responseText = await requestAI(prompt);
     const parsed = extractJson(responseText);
 
     if (!Array.isArray(parsed) || !parsed.length) {
@@ -267,7 +471,7 @@ Rules:
         question: item.question.trim(),
       }));
   } catch (error) {
-    console.error("Gemini question fallback:", error.message);
+    console.error("AI question fallback:", error.message);
     return fallbackQuestions;
   }
 };
@@ -369,7 +573,7 @@ ${normalizedText.slice(0, 12000)}
 `;
 
   try {
-    const responseText = await requestGemini(prompt);
+    const responseText = await requestAI(prompt);
     const parsed = extractJson(responseText);
     const fallback = buildFallbackResumeAnalysis(normalizedText);
 
@@ -395,14 +599,190 @@ ${normalizedText.slice(0, 12000)}
         : fallback.suggestions,
     };
   } catch (error) {
-    console.error("Gemini resume fallback:", error.message);
+    console.error("AI resume fallback:", error.message);
     return buildFallbackResumeAnalysis(normalizedText);
+  }
+};
+
+const normalizePersonalizedQuestions = (items = [], fallbackQuestions = []) => {
+  const seen = new Set();
+
+  const normalized = items
+    .map((item) => {
+      const question = typeof item === "string" ? item : item?.question;
+      return typeof question === "string" ? question.replace(/\s+/g, " ").trim() : "";
+    })
+    .filter((question) => {
+      if (!question || seen.has(question.toLowerCase())) {
+        return false;
+      }
+
+      seen.add(question.toLowerCase());
+      return true;
+    })
+    .slice(0, 5)
+    .map((question) => ({
+      category: "resume",
+      question,
+    }));
+
+  if (normalized.length >= 5) {
+    return normalized;
+  }
+
+  fallbackQuestions.forEach((item) => {
+    if (normalized.length >= 5) {
+      return;
+    }
+
+    const question = item?.question || "";
+    const key = question.toLowerCase();
+
+    if (question && !seen.has(key)) {
+      seen.add(key);
+      normalized.push({ category: "resume", question });
+    }
+  });
+
+  return normalized.slice(0, 5);
+};
+
+const extractResumeSignals = (text = "") => {
+  const normalizedText = text.replace(/\s+/g, " ").trim();
+  const skillsToDetect = [
+    "React",
+    "Node.js",
+    "Express",
+    "MongoDB",
+    "JWT",
+    "JavaScript",
+    "TypeScript",
+    "Python",
+    "Java",
+    "SQL",
+    "REST API",
+    "Git",
+    "Docker",
+    "AWS",
+    "Machine Learning",
+    "AI",
+  ];
+
+  const skills = skillsToDetect.filter((skill) => {
+    const escaped = skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`\\b${escaped}\\b`, "i").test(normalizedText);
+  });
+
+  const projectMatches = normalizedText.match(
+    /\b([A-Z][A-Za-z0-9]+(?:\s+[A-Z][A-Za-z0-9]+){1,5}\s+(?:Platform|App|Application|System|Website|Portal|Dashboard|Project))\b/g
+  );
+
+  const projects = [...new Set(projectMatches || [])].slice(0, 3);
+
+  return {
+    skills,
+    projects,
+  };
+};
+
+const buildFallbackPersonalizedQuestions = (text = "") => {
+  const { skills, projects } = extractResumeSignals(text);
+  const primaryProject = projects[0] || "your main resume project";
+  const questions = [];
+
+  if (skills.includes("JWT")) {
+    questions.push(`Explain how you implemented JWT authentication in ${primaryProject}.`);
+  }
+
+  if (skills.includes("MongoDB")) {
+    questions.push(`How did you design the MongoDB schema for ${primaryProject}?`);
+  }
+
+  if (skills.includes("React")) {
+    questions.push(`Which React components or state patterns were most important in ${primaryProject}?`);
+  }
+
+  if (skills.includes("Node.js") || skills.includes("Express")) {
+    questions.push(`How did you structure the Node.js and Express backend for ${primaryProject}?`);
+  }
+
+  if (projects[0]) {
+    questions.push(`Describe the architecture of your ${projects[0]} and the main technical decisions you made.`);
+  }
+
+  skills
+    .filter((skill) => !["JWT", "MongoDB", "React", "Node.js", "Express"].includes(skill))
+    .forEach((skill) => {
+      questions.push(`Where did you use ${skill} in your resume projects, and what problem did it solve?`);
+    });
+
+  if (questions.length < 5) {
+    questions.push(
+      "Which resume project best demonstrates your technical depth, and what was the hardest part?",
+      "Pick one technology from your resume and explain a bug or performance issue you solved with it.",
+      "How does your education connect to the projects and technologies listed on your resume?",
+      "What would you improve in your strongest resume project if you rebuilt it today?",
+      "Walk me through one project from requirements to deployment using the technologies on your resume."
+    );
+  }
+
+  return normalizePersonalizedQuestions(questions);
+};
+
+const generateResumeInterviewQuestions = async (text = "") => {
+  const normalizedText = text.replace(/\s+/g, " ").trim();
+
+  if (!normalizedText) {
+    throw new Error("Resume text is required");
+  }
+
+  const fallbackQuestions = buildFallbackPersonalizedQuestions(normalizedText);
+  const prompt = `
+You are a senior technical interviewer.
+Generate exactly 5 personalized interview questions based only on this resume text.
+Return strict JSON only as an array in this shape:
+[
+  { "category": "resume", "question": "Question text" }
+]
+
+Rules:
+- Every question must reference a concrete skill, project, education item, tool, or technology found in the resume.
+- Do not ask generic questions like "Tell me about yourself" or "What are your strengths?"
+- Prefer project-specific questions that connect multiple resume signals.
+- Keep questions concise and realistic for a mock interview.
+- Do not invent technologies or projects not present in the resume.
+- Keep category exactly "resume".
+- Do not add numbering.
+
+Resume text:
+${normalizedText.slice(0, 12000)}
+`;
+
+  try {
+    const responseText = await requestAI(prompt);
+    const parsed = extractJson(responseText);
+
+    if (!Array.isArray(parsed)) {
+      throw new Error("Invalid AI resume question payload");
+    }
+
+    const questions = normalizePersonalizedQuestions(parsed, fallbackQuestions);
+
+    if (questions.length < 5) {
+      throw new Error("AI returned fewer than 5 usable resume questions");
+    }
+
+    return questions;
+  } catch (error) {
+    console.error("AI resume question fallback:", error.message);
+    return fallbackQuestions;
   }
 };
 
 module.exports = {
   analyzeResumeText,
   buildFallbackSummary,
+  generateResumeInterviewQuestions,
   getInterviewEvaluation,
   getInterviewQuestions,
 };

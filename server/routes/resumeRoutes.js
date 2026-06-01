@@ -2,7 +2,11 @@ const express = require("express");
 const router = express.Router();
 const multer = require("multer");
 const { PDFParse } = require("pdf-parse");
-const { analyzeResumeText } = require("../services/aiService");
+const { protect } = require("../middleware/authMiddleware");
+const {
+  analyzeResumeText,
+  generateResumeInterviewQuestions,
+} = require("../services/aiService");
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
@@ -24,7 +28,7 @@ const upload = multer({
 });
 
 // 📄 Upload + extract text
-router.post("/upload", upload.single("resume"), async (req, res) => {
+router.post("/upload", protect, upload.single("resume"), async (req, res) => {
   let parser;
 
   try {
@@ -42,12 +46,16 @@ router.post("/upload", upload.single("resume"), async (req, res) => {
       });
     }
 
-    const analysis = await analyzeResumeText(text);
+    const [analysis, questions] = await Promise.all([
+      analyzeResumeText(text),
+      generateResumeInterviewQuestions(text),
+    ]);
 
     res.json({
       fileName: req.file.originalname,
       text,
       analysis,
+      questions,
     });
   } catch (err) {
     console.error(err);
@@ -69,6 +77,22 @@ router.post("/upload", upload.single("resume"), async (req, res) => {
         console.error("PDF parser cleanup failed:", destroyError.message);
       }
     }
+  }
+});
+
+router.post("/generate-questions", protect, async (req, res, next) => {
+  try {
+    const text = (req.body?.text || "").replace(/\s+/g, " ").trim();
+
+    if (!text) {
+      return res.status(400).json({ message: "Resume text is required" });
+    }
+
+    const questions = await generateResumeInterviewQuestions(text);
+
+    res.json({ questions });
+  } catch (error) {
+    next(error);
   }
 });
 

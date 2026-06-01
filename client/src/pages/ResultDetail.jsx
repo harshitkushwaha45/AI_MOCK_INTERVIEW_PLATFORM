@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { authFetch } from "../api";
 import ScoreChart from "../components/ScoreChart";
+import SkillAnalyticsChart from "../components/SkillAnalyticsChart";
 
 function ResultDetail({ resultId, onBack }) {
   const [data, setData] = useState(null);
@@ -35,6 +36,7 @@ function ResultDetail({ resultId, onBack }) {
   if (!data) return <p style={{ color: "white" }}>Loading...</p>;
 
   const score = Number(data.summary?.averageScore) || 0;
+  const emotionMetrics = data.emotionMetrics || {};
   const scoreColor =
     score >= 7 ? "#22c55e" : score >= 5 ? "#f59e0b" : "#ef4444";
 
@@ -110,6 +112,77 @@ function ResultDetail({ resultId, onBack }) {
               {score}
               <span style={{ fontSize: "14px", color: "#cbd5e1" }}>/10</span>
             </p>
+          </div>
+        </div>
+
+        <div
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(30,41,59,0.92), rgba(15,23,42,0.95))",
+            padding: "24px",
+            borderRadius: "24px",
+            border: "1px solid rgba(148,163,184,0.12)",
+            boxShadow: "0 18px 40px rgba(2, 6, 23, 0.34)",
+            marginBottom: "22px",
+          }}
+        >
+          <p
+            style={{
+              margin: 0,
+              color: "#7dd3fc",
+              textTransform: "uppercase",
+              letterSpacing: "0.16em",
+              fontSize: "12px",
+            }}
+          >
+            Camera Analysis
+          </p>
+          <h2 style={{ margin: "10px 0 18px", fontSize: "28px" }}>
+            Confidence and emotion signals
+          </h2>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              gap: "14px",
+            }}
+          >
+            {[
+              ["Confidence", emotionMetrics.confidenceScore || 0],
+              ["Eye Contact", emotionMetrics.eyeContactScore || 0],
+              ["Face Visibility", emotionMetrics.faceVisibilityScore || 0],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                style={{
+                  padding: "16px",
+                  borderRadius: "18px",
+                  background: "rgba(15, 23, 42, 0.62)",
+                  border: "1px solid rgba(56, 189, 248, 0.14)",
+                }}
+              >
+                <p style={{ margin: 0, color: "#94a3b8", fontSize: "12px" }}>{label}</p>
+                <p style={{ margin: "8px 0 0", color: "#f8fafc", fontSize: "28px", fontWeight: 900 }}>
+                  {value}
+                  <span style={{ fontSize: "13px", color: "#cbd5e1" }}>/100</span>
+                </p>
+              </div>
+            ))}
+
+            <div
+              style={{
+                padding: "16px",
+                borderRadius: "18px",
+                background: "rgba(15, 23, 42, 0.62)",
+                border: "1px solid rgba(34, 197, 94, 0.14)",
+              }}
+            >
+              <p style={{ margin: 0, color: "#94a3b8", fontSize: "12px" }}>Dominant Emotion</p>
+              <p style={{ margin: "8px 0 0", color: "#f8fafc", fontSize: "28px", fontWeight: 900 }}>
+                {emotionMetrics.emotion || "Unknown"}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -205,6 +278,32 @@ function ResultDetail({ resultId, onBack }) {
             </div>
           </div>
         </div>
+
+        <div style={{ marginBottom: "22px" }}>
+          <SkillAnalyticsChart
+            scores={data.skillAnalytics?.skillScores || {}}
+            title="Skill Breakdown"
+          />
+        </div>
+
+        {data.skillAnalytics && (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: "16px",
+              marginBottom: "22px",
+            }}
+          >
+            <SkillList title="Strengths" items={data.skillAnalytics.strengths} color="#86efac" />
+            <SkillList title="Weak Areas" items={data.skillAnalytics.weakAreas} color="#fcd34d" />
+            <SkillList
+              title="Recommendations"
+              items={data.skillAnalytics.recommendations}
+              color="#7dd3fc"
+            />
+          </div>
+        )}
 
         <div style={{ marginBottom: "16px" }}>
           <p
@@ -314,6 +413,37 @@ function ResultDetail({ resultId, onBack }) {
         {/* CHART */}
         <ScoreChart answers={data.answers} />
       </div>
+    </div>
+  );
+}
+
+function SkillList({ title, items = [], color }) {
+  return (
+    <div
+      style={{
+        padding: "18px",
+        borderRadius: "20px",
+        background: "rgba(15, 23, 42, 0.62)",
+        border: `1px solid ${color}33`,
+      }}
+    >
+      <p
+        style={{
+          margin: "0 0 10px",
+          color,
+          fontSize: "12px",
+          textTransform: "uppercase",
+          letterSpacing: "0.12em",
+          fontWeight: 800,
+        }}
+      >
+        {title}
+      </p>
+      <ul style={{ margin: 0, paddingLeft: "18px", color: "#e2e8f0", lineHeight: 1.7 }}>
+        {(items.length ? items : ["No data yet"]).map((item, index) => (
+          <li key={`${title}-${index}`}>{item}</li>
+        ))}
+      </ul>
     </div>
   );
 }

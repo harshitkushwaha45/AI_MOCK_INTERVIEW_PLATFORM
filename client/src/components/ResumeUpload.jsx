@@ -28,6 +28,9 @@ function ResumeUpload({ onAnalysisComplete, onSkip }) {
 
       const res = await fetch(`${BASE_URL}/api/resume/upload`, {
         method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
         body: formData,
       });
 
@@ -38,7 +41,6 @@ function ResumeUpload({ onAnalysisComplete, onSkip }) {
       }
 
       setResult(data);
-      onAnalysisComplete?.(data);
 
     } catch (err) {
       console.error(err);
@@ -80,7 +82,7 @@ function ResumeUpload({ onAnalysisComplete, onSkip }) {
         Upload your PDF resume
       </h2>
       <p style={{ margin: 0, color: "#cbd5e1", fontSize: "15px", lineHeight: 1.7 }}>
-        We will extract the text, validate the PDF, and check whether your resume looks interview-ready.
+        We will extract the text, review the resume, and prepare interview questions from your own projects and skills.
       </p>
 
       <div
@@ -137,6 +139,7 @@ function ResumeUpload({ onAnalysisComplete, onSkip }) {
         >
           <button
             onClick={handleUpload}
+            disabled={loading}
             style={{
               padding: "14px 24px",
               border: "none",
@@ -144,11 +147,12 @@ function ResumeUpload({ onAnalysisComplete, onSkip }) {
               background: "linear-gradient(135deg, #38bdf8, #0ea5e9)",
               color: "#e0f2fe",
               fontWeight: 700,
-              cursor: "pointer",
+              cursor: loading ? "not-allowed" : "pointer",
+              opacity: loading ? 0.7 : 1,
               boxShadow: "0 14px 30px rgba(14, 165, 233, 0.28)",
             }}
           >
-            {loading ? "Checking Resume..." : "Upload And Check"}
+            {loading ? "Analyzing Resume..." : "Upload And Generate Questions"}
           </button>
 
           <button
@@ -276,7 +280,7 @@ function ResumeUpload({ onAnalysisComplete, onSkip }) {
 
           <div style={{ marginTop: "20px", display: "flex", justifyContent: "flex-end" }}>
             <button
-              onClick={onSkip}
+              onClick={() => onAnalysisComplete?.(result)}
               style={{
                 padding: "14px 24px",
                 border: "none",
@@ -288,7 +292,7 @@ function ResumeUpload({ onAnalysisComplete, onSkip }) {
                 boxShadow: "0 14px 30px rgba(14, 165, 233, 0.28)",
               }}
             >
-              Continue To Interview
+              Continue With Resume Questions
             </button>
           </div>
         </div>
