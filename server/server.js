@@ -33,6 +33,10 @@ app.get("/api/health", (req, res) => {
   res.json({ message: "AI Mock Interview API is running" });
 });
 
+app.use("/api", (req, res) => {
+  res.status(404).json({ message: `API route not found: ${req.originalUrl}` });
+});
+
 const clientDistPath = path.join(__dirname, "..", "client", "dist");
 const clientIndexPath = path.join(clientDistPath, "index.html");
 
