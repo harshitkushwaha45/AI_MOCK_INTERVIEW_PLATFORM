@@ -1,4 +1,10 @@
-const rawBaseUrl = import.meta.env.VITE_API_URL || "";
+const RENDER_BACKEND_URL = "https://ai-mock-interview-platform-elvw.onrender.com";
+const RENDER_FRONTEND_HOST = "ai-mock-interview-platform-1-ofb2.onrender.com";
+const isConfiguredRenderFrontend =
+  typeof window !== "undefined" && window.location.hostname === RENDER_FRONTEND_HOST;
+
+const rawBaseUrl =
+  import.meta.env.VITE_API_URL || (isConfiguredRenderFrontend ? RENDER_BACKEND_URL : "");
 
 export const BASE_URL = rawBaseUrl.replace(/\/$/, "");
 
