@@ -1,10 +1,10 @@
 const https = require("https");
-const OpenAI = require("openai");
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const GEMINI_HOST = "generativelanguage.googleapis.com";
 const GEMINI_PATH = `/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.2";
+let OpenAI;
 
 const getApiKey = () => process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 const getAiProvider = () => (process.env.AI_PROVIDER || "gemini").toLowerCase();
@@ -107,6 +107,18 @@ const requestGemini = async (prompt) => {
 const requestOpenAI = async (prompt) => {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error("OpenAI API key is missing");
+  }
+
+  if (!OpenAI) {
+    try {
+      OpenAI = require("openai");
+    } catch (error) {
+      if (error.code === "MODULE_NOT_FOUND") {
+        throw new Error("OpenAI package is not installed. Run npm install in the server folder.");
+      }
+
+      throw error;
+    }
   }
 
   const client = new OpenAI({

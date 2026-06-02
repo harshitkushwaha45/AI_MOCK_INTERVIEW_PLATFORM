@@ -6,13 +6,13 @@ export const readJson = async (response) => {
   const text = await response.text();
 
   if (!text) {
-    throw new Error("API is not running at this URL. Check your Render backend deployment.");
+    throw new Error(`Server returned an empty response (${response.status}).`);
   }
 
   try {
     return JSON.parse(text);
   } catch {
-    throw new Error("Server returned an invalid response");
+    throw new Error(`Server returned an invalid JSON response (${response.status}).`);
   }
 };
 
