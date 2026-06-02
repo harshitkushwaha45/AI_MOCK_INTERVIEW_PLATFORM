@@ -93,7 +93,7 @@ const getMostCommonEmotion = (items) => {
   return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "Unknown";
 };
 
-function EmotionCamera({ onMetricsChange }) {
+function EmotionCamera({ onMetricsChange, compact = false }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const intervalRef = useRef(null);
@@ -291,82 +291,35 @@ function EmotionCamera({ onMetricsChange }) {
 
   return (
     <div
-      style={{
-        marginTop: "22px",
-        padding: "18px",
-        borderRadius: "24px",
-        background: "rgba(15, 23, 42, 0.72)",
-        border: "1px solid rgba(148,163,184,0.12)",
-      }}
+      className={`emotion-camera${compact ? " emotion-camera--compact" : ""}`}
+      style={{ "--emotion-color": indicatorColor }}
     >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "14px",
-          flexWrap: "wrap",
-          marginBottom: "14px",
-        }}
-      >
+      <div className="emotion-camera__header">
         <div>
-          <p
-            style={{
-              margin: 0,
-              color: "#7dd3fc",
-              fontSize: "12px",
-              letterSpacing: "0.14em",
-              textTransform: "uppercase",
-            }}
-          >
-            Emotion Detection
-          </p>
-          <p style={{ margin: "6px 0 0", color: "#e2e8f0", fontWeight: 800 }}>
+          <p className="panel-eyebrow">Emotion Detection</p>
+          <p className="emotion-camera__status">
             {status}
           </p>
         </div>
 
         <button
           onClick={() => setCameraEnabled((enabled) => !enabled)}
-          style={{
-            padding: "10px 14px",
-            borderRadius: "999px",
-            border: "1px solid rgba(56, 189, 248, 0.2)",
-            background: cameraEnabled
-              ? "rgba(14, 165, 233, 0.16)"
-              : "rgba(127, 29, 29, 0.28)",
-            color: cameraEnabled ? "#bae6fd" : "#fecaca",
-            fontWeight: 800,
-            cursor: "pointer",
-          }}
+          className={`ui-button ${
+            cameraEnabled ? "ui-button--ghost" : "ui-button--danger"
+          }`}
         >
           {cameraEnabled ? "Pause Camera" : "Start Camera"}
         </button>
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          gap: "10px",
-          flexWrap: "wrap",
-          marginBottom: "14px",
-        }}
-      >
+      <div className="emotion-camera__controls">
         <select
           value={selectedDeviceId}
           onChange={(event) => {
             setSelectedDeviceId(event.target.value);
             setCameraEnabled(true);
           }}
-          style={{
-            flex: "1 1 220px",
-            padding: "10px 12px",
-            borderRadius: "999px",
-            border: "1px solid rgba(148,163,184,0.18)",
-            background: "rgba(2, 6, 23, 0.74)",
-            color: "#cbd5e1",
-            outline: "none",
-          }}
+          className="camera-select"
         >
           <option value="">Auto select camera</option>
           {devices.map((device, index) => (
@@ -383,93 +336,35 @@ function EmotionCamera({ onMetricsChange }) {
             setCameraEnabled(false);
             window.setTimeout(() => setCameraEnabled(true), 120);
           }}
-          style={{
-            padding: "10px 14px",
-            borderRadius: "999px",
-            border: "1px solid rgba(34, 197, 94, 0.2)",
-            background: "rgba(34, 197, 94, 0.12)",
-            color: "#bbf7d0",
-            fontWeight: 800,
-            cursor: "pointer",
-          }}
+          className="ui-button ui-button--success"
         >
           Retry Camera
         </button>
       </div>
 
       {cameraError && (
-        <div
-          style={{
-            marginBottom: "14px",
-            padding: "12px 14px",
-            borderRadius: "16px",
-            background: "rgba(127, 29, 29, 0.24)",
-            border: "1px solid rgba(248, 113, 113, 0.24)",
-            color: "#fecaca",
-            fontSize: "13px",
-            lineHeight: 1.5,
-          }}
-        >
+        <div className="feedback-alert">
           {cameraError}
         </div>
       )}
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: "16px",
-          alignItems: "stretch",
-        }}
-      >
-        <div
-          style={{
-            position: "relative",
-            minHeight: "172px",
-            overflow: "hidden",
-            borderRadius: "20px",
-            background: "rgba(2, 6, 23, 0.88)",
-            border: `1px solid ${indicatorColor}55`,
-          }}
-        >
+      <div className="emotion-camera__grid">
+        <div className="emotion-camera__preview">
           <video
             ref={videoRef}
             muted
             playsInline
+            className="emotion-camera__video"
             style={{
-              width: "100%",
-              height: "100%",
-              minHeight: "172px",
-              objectFit: "cover",
-              transform: "scaleX(-1)",
               opacity: cameraEnabled ? 1 : 0.35,
             }}
           />
-          <div
-            style={{
-              position: "absolute",
-              left: "12px",
-              bottom: "12px",
-              padding: "8px 10px",
-              borderRadius: "999px",
-              background: "rgba(2, 6, 23, 0.78)",
-              border: `1px solid ${indicatorColor}55`,
-              color: "#f8fafc",
-              fontSize: "12px",
-              fontWeight: 800,
-            }}
-          >
+          <div className="emotion-camera__emotion-pill">
             {metrics.emotion}
           </div>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
-            gap: "12px",
-          }}
-        >
+        <div className="emotion-camera__metrics">
           <MetricCard
             label="Confidence"
             value={metrics.confidenceScore}
@@ -494,33 +389,19 @@ function EmotionCamera({ onMetricsChange }) {
 function MetricCard({ label, value, color }) {
   return (
     <div
-      style={{
-        padding: "14px",
-        borderRadius: "18px",
-        background: "rgba(2, 6, 23, 0.58)",
-        border: `1px solid ${color}33`,
-      }}
+      className="metric-card"
+      style={{ "--metric-color": color }}
     >
-      <p style={{ margin: 0, color: "#94a3b8", fontSize: "12px" }}>{label}</p>
-      <p style={{ margin: "8px 0 10px", color: "#f8fafc", fontSize: "26px", fontWeight: 900 }}>
+      <p className="metric-card__label">{label}</p>
+      <p className="metric-card__value">
         {value}
-        <span style={{ fontSize: "12px", color: "#cbd5e1" }}>/100</span>
+        <span>/100</span>
       </p>
-      <div
-        style={{
-          height: "7px",
-          borderRadius: "999px",
-          overflow: "hidden",
-          background: "rgba(15, 23, 42, 0.95)",
-        }}
-      >
+      <div className="metric-card__track">
         <div
+          className="metric-card__bar"
           style={{
             width: `${value}%`,
-            height: "100%",
-            borderRadius: "999px",
-            background: color,
-            transition: "width 300ms ease",
           }}
         />
       </div>
