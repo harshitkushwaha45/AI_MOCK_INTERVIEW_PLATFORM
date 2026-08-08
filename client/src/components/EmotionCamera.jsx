@@ -20,6 +20,9 @@ const EMPTY_METRICS = {
   faceVisibilityScore: 0,
   emotion: "Unknown",
 };
+const DETECTION_INTERVAL_MS = 650;
+const MAX_SAMPLE_COUNT = 18;
+let modelLoadPromise = null;
 
 const clamp = (value) => Math.max(0, Math.min(100, Math.round(value)));
 
@@ -96,8 +99,9 @@ const getMostCommonEmotion = (items) => {
 function EmotionCamera({ onMetricsChange, compact = false }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
-  const intervalRef = useRef(null);
+  const timeoutRef = useRef(null);
   const samplesRef = useRef([]);
+  const missedFramesRef = useRef(0);
   const onMetricsChangeRef = useRef(onMetricsChange);
 
   const [metrics, setMetrics] = useState(EMPTY_METRICS);
@@ -121,9 +125,9 @@ function EmotionCamera({ onMetricsChange, compact = false }) {
     let cancelled = false;
 
     const stopCamera = () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
       }
 
       streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -131,7 +135,7 @@ function EmotionCamera({ onMetricsChange, compact = false }) {
     };
 
     const publishMetrics = (nextMetrics) => {
-      samplesRef.current = [...samplesRef.current.slice(-89), nextMetrics];
+      samplesRef.current = [...samplesRef.current.slice(-(MAX_SAMPLE_COUNT - 1)), nextMetrics];
 
       const finalMetrics = {
         confidenceScore: average(samplesRef.current, "confidenceScore"),
@@ -142,6 +146,81 @@ function EmotionCamera({ onMetricsChange, compact = false }) {
 
       setMetrics(finalMetrics);
       onMetricsChangeRef.current?.(finalMetrics);
+    };
+
+    const scheduleDetection = () => {
+      if (cancelled || !cameraEnabled) {
+        return;
+      }
+
+      timeoutRef.current = window.setTimeout(runDetection, DETECTION_INTERVAL_MS);
+    };
+
+    const publishMissedFrame = () => {
+      missedFramesRef.current += 1;
+
+      if (missedFramesRef.current < 4 && samplesRef.current.length) {
+        setStatus("Keeping last face reading");
+        return;
+      }
+
+      publishMetrics(EMPTY_METRICS);
+      setStatus("Face not visible");
+    };
+
+    const runDetection = async () => {
+      if (cancelled || !cameraEnabled) {
+        return;
+      }
+
+      const video = videoRef.current;
+
+      if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+        scheduleDetection();
+        return;
+      }
+
+      try {
+        const detection = await faceapi
+          .detectSingleFace(
+            video,
+            new faceapi.TinyFaceDetectorOptions({
+              inputSize: 416,
+              scoreThreshold: 0.2,
+            })
+          )
+          .withFaceLandmarks(true)
+          .withFaceExpressions();
+
+        if (!detection) {
+          publishMissedFrame();
+          return;
+        }
+
+        missedFramesRef.current = 0;
+
+        const emotion = getDominantEmotion(detection.expressions);
+        const faceVisibilityScore = clamp(detection.detection.score * 100);
+        const eyeContactScore = calculateEyeContact(detection);
+        const confidenceScore = calculateConfidence({
+          emotion,
+          eyeContactScore,
+          faceVisibilityScore,
+        });
+
+        publishMetrics({
+          confidenceScore,
+          eyeContactScore,
+          faceVisibilityScore,
+          emotion,
+        });
+        setStatus("Live analysis active");
+      } catch (error) {
+        console.error("Face analysis failed:", error);
+        setStatus("Retrying face analysis");
+      } finally {
+        scheduleDetection();
+      }
     };
 
     const startCamera = async () => {
@@ -155,11 +234,13 @@ function EmotionCamera({ onMetricsChange, compact = false }) {
         setCameraError("");
         setStatus("Loading face models");
 
-        await Promise.all([
+        modelLoadPromise ||= Promise.all([
           faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
           faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
           faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
         ]);
+
+        await modelLoadPromise;
 
         if (cancelled) return;
 
@@ -208,51 +289,7 @@ function EmotionCamera({ onMetricsChange, compact = false }) {
         }
 
         setStatus("Analyzing face");
-
-        intervalRef.current = setInterval(async () => {
-          if (!videoRef.current || videoRef.current.readyState < 2) {
-            return;
-          }
-
-          const detection = await faceapi
-            .detectSingleFace(
-              videoRef.current,
-              new faceapi.TinyFaceDetectorOptions({
-                inputSize: 224,
-                scoreThreshold: 0.45,
-              })
-            )
-            .withFaceLandmarks(true)
-            .withFaceExpressions();
-
-          if (!detection) {
-            publishMetrics({
-              confidenceScore: 0,
-              eyeContactScore: 0,
-              faceVisibilityScore: 0,
-              emotion: "Unknown",
-            });
-            setStatus("Face not visible");
-            return;
-          }
-
-          const emotion = getDominantEmotion(detection.expressions);
-          const faceVisibilityScore = clamp(detection.detection.score * 100);
-          const eyeContactScore = calculateEyeContact(detection);
-          const confidenceScore = calculateConfidence({
-            emotion,
-            eyeContactScore,
-            faceVisibilityScore,
-          });
-
-          publishMetrics({
-            confidenceScore,
-            eyeContactScore,
-            faceVisibilityScore,
-            emotion,
-          });
-          setStatus("Live analysis active");
-        }, 1200);
+        scheduleDetection();
       } catch (error) {
         console.error(error);
         const message =

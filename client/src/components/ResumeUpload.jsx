@@ -1,11 +1,56 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { BASE_URL, readJson } from "../api";
+import { ArenaIcon } from "./ArenaShell";
 
-function ResumeUpload({ onAnalysisComplete, onSkip }) {
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
+
+const formatFileSize = (size) => {
+  if (!Number.isFinite(size)) return "";
+
+  return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+};
+
+function ResumeUpload({ onAnalysisComplete, onAuthExpired, onSkip }) {
+  const inputRef = useRef(null);
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const selectFile = (selectedFile) => {
+    if (!selectedFile) {
+      return;
+    }
+
+    const isPdf =
+      selectedFile.type === "application/pdf" ||
+      selectedFile.name.toLowerCase().endsWith(".pdf");
+
+    if (!isPdf) {
+      setFile(null);
+      setResult(null);
+      setError("Only PDF files are allowed.");
+      return;
+    }
+
+    if (selectedFile.size > MAX_FILE_SIZE) {
+      setFile(null);
+      setResult(null);
+      setError("PDF must be smaller than 5MB.");
+      return;
+    }
+
+    setFile(selectedFile);
+    setResult(null);
+    setError("");
+  };
+
+  const handleDrop = (event) => {
+    event.preventDefault();
+    setIsDragging(false);
+    selectFile(event.dataTransfer.files?.[0]);
+  };
 
   const handleUpload = async () => {
     if (!file) {
@@ -36,6 +81,13 @@ function ResumeUpload({ onAnalysisComplete, onSkip }) {
 
       const data = await readJson(res);
 
+      if (res.status === 401 || res.status === 403) {
+        localStorage.removeItem("token");
+        onAuthExpired?.();
+        setError("Your login session expired. Please log in again.");
+        return;
+      }
+
       if (!res.ok) {
         throw new Error(data.message || "Upload failed");
       }
@@ -51,226 +103,148 @@ function ResumeUpload({ onAnalysisComplete, onSkip }) {
   };
 
   return (
-    <div
-      style={{
-        width: "min(920px, calc(100vw - 48px))",
-        borderRadius: "30px",
-        padding: "34px",
-        background:
-          "linear-gradient(180deg, rgba(30,41,59,0.92), rgba(15,23,42,0.96))",
-        border: "1px solid rgba(148,163,184,0.16)",
-        boxShadow:
-          "0 30px 80px rgba(2, 6, 23, 0.7), inset 0 1px 0 rgba(255,255,255,0.04)",
-        backdropFilter: "blur(18px)",
-        position: "relative",
-        zIndex: 1,
-        color: "white",
-      }}
-    >
-      <p
-        style={{
-          margin: 0,
-          fontSize: "12px",
-          letterSpacing: "0.18em",
-          textTransform: "uppercase",
-          color: "#7dd3fc",
-        }}
-      >
-        Resume Check
-      </p>
-      <h2 style={{ margin: "12px 0 10px", fontSize: "38px", lineHeight: 1.08 }}>
-        Upload your PDF resume
-      </h2>
-      <p style={{ margin: 0, color: "#cbd5e1", fontSize: "15px", lineHeight: 1.7 }}>
-        We will extract the text, review the resume, and prepare interview questions from your own projects and skills.
-      </p>
+    <section className="resume-upload-card" aria-labelledby="resume-upload-title">
+      <div className="resume-upload-card__badge">
+        <ArenaIcon name="uploadFile" />
+      </div>
+
+      <div className="resume-upload-card__heading">
+        <h2 id="resume-upload-title">Upload Your Resume</h2>
+        <p>Let AI understand you better</p>
+      </div>
 
       <div
-        style={{
-          marginTop: "28px",
-          padding: "24px",
-          borderRadius: "24px",
-          background: "rgba(15, 23, 42, 0.72)",
-          border: "1px solid rgba(148,163,184,0.12)",
+        className={[
+          "resume-dropzone",
+          isDragging ? "is-dragging" : "",
+          file ? "has-file" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setIsDragging(true);
         }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragLeave={(event) => {
+          if (event.currentTarget.contains(event.relatedTarget)) {
+            return;
+          }
+
+          setIsDragging(false);
+        }}
+        onDrop={handleDrop}
       >
         <input
+          ref={inputRef}
           type="file"
           accept="application/pdf"
           onChange={(e) => {
-            setFile(e.target.files?.[0] || null);
-            setError("");
+            selectFile(e.target.files?.[0]);
+            e.target.value = "";
           }}
-          style={{ color: "#cbd5e1" }}
+          className="resume-dropzone__input"
         />
 
-        <p style={{ margin: "12px 0 0", color: "#94a3b8", fontSize: "13px" }}>
-          PDF only, up to 5MB.
+        <ArenaIcon name="cloudUpload" className="resume-dropzone__icon" />
+
+        <p className="resume-dropzone__title">
+          {file ? file.name : "Drag & drop your PDF here"}
         </p>
 
-        {file && (
-          <p style={{ margin: "16px 0 0", color: "#e2e8f0", fontSize: "14px" }}>
-            Selected: <strong>{file.name}</strong>
-          </p>
-        )}
+        {!file && <span className="resume-dropzone__divider">or</span>}
 
-        {error && (
-          <div
-            style={{
-              marginTop: "18px",
-              padding: "14px 16px",
-              borderRadius: "16px",
-              background: "rgba(127, 29, 29, 0.24)",
-              border: "1px solid rgba(248, 113, 113, 0.24)",
-              color: "#fecaca",
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        <div
-          style={{
-            marginTop: "22px",
-            display: "flex",
-            gap: "12px",
-            flexWrap: "wrap",
-          }}
+        <button
+          className="resume-browse-button"
+          onClick={() => inputRef.current?.click()}
+          type="button"
         >
-          <button
-            onClick={handleUpload}
-            disabled={loading}
-            style={{
-              padding: "14px 24px",
-              border: "none",
-              borderRadius: "999px",
-              background: "linear-gradient(135deg, #38bdf8, #0ea5e9)",
-              color: "#e0f2fe",
-              fontWeight: 700,
-              cursor: loading ? "not-allowed" : "pointer",
-              opacity: loading ? 0.7 : 1,
-              boxShadow: "0 14px 30px rgba(14, 165, 233, 0.28)",
-            }}
-          >
-            {loading ? "Analyzing Resume..." : "Upload And Generate Questions"}
-          </button>
+          {file ? "Choose Another PDF" : "Browse PDF"}
+        </button>
 
+        <small className="resume-dropzone__meta">
+          {file ? `${formatFileSize(file.size)} selected` : "PDF only, up to 5MB"}
+        </small>
+      </div>
+
+      {error && <div className="resume-alert">{error}</div>}
+
+      <div
+        className={[
+          "resume-upload-actions",
+          !file ? "resume-upload-actions--subtle" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        {file && (
           <button
-            onClick={onSkip}
-            style={{
-              padding: "14px 24px",
-              borderRadius: "999px",
-              border: "1px solid rgba(148,163,184,0.16)",
-              background: "rgba(15, 23, 42, 0.74)",
-              color: "#cbd5e1",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
+            className="resume-primary-button"
+            disabled={loading}
+            onClick={handleUpload}
+            type="button"
           >
-            Skip For Now
+            {loading ? "Analyzing Resume..." : "Analyze Resume"}
           </button>
-        </div>
+        )}
+
+        {onSkip && (
+          <button
+            className="resume-secondary-button"
+            onClick={onSkip}
+            type="button"
+          >
+            Skip Resume
+          </button>
+        )}
       </div>
 
       {result?.analysis && (
-        <div
-          style={{
-            marginTop: "24px",
-            padding: "24px",
-            borderRadius: "24px",
-            background: "rgba(15, 23, 42, 0.72)",
-            border: "1px solid rgba(148,163,184,0.12)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: "16px",
-              flexWrap: "wrap",
-            }}
-          >
+        <div className="resume-result">
+          <div className="resume-result__header">
             <div>
-              <p style={{ margin: 0, color: "#94a3b8", fontSize: "12px", textTransform: "uppercase", letterSpacing: "0.12em" }}>
-                Resume Verdict
-              </p>
-              <h3 style={{ margin: "10px 0 0", fontSize: "28px", color: result.analysis.ok ? "#86efac" : "#fbbf24" }}>
+              <p>Resume Verdict</p>
+              <h3 className={result.analysis.ok ? "is-good" : "is-warning"}>
                 {result.analysis.ok ? "Looks Good" : "Needs Improvement"}
               </h3>
             </div>
 
-            <div
-              style={{
-                padding: "14px 18px",
-                borderRadius: "18px",
-                background: "rgba(2, 6, 23, 0.72)",
-                border: "1px solid rgba(56, 189, 248, 0.16)",
-                minWidth: "140px",
-              }}
-            >
-              <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8" }}>Score</p>
-              <p style={{ margin: "8px 0 0", fontSize: "28px", fontWeight: 800 }}>
+            <div className="resume-score">
+              <span>Score</span>
+              <strong>
                 {result.analysis.score}
-                <span style={{ fontSize: "13px", color: "#cbd5e1" }}>/10</span>
-              </p>
+                <small>/10</small>
+              </strong>
             </div>
           </div>
 
-          <p style={{ margin: "16px 0 0", color: "#e2e8f0", lineHeight: 1.7 }}>
-            {result.analysis.verdict}
-          </p>
+          <p className="resume-result__verdict">{result.analysis.verdict}</p>
 
-          <div
-            style={{
-              marginTop: "20px",
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: "16px",
-            }}
-          >
-            <div
-              style={{
-                padding: "18px",
-                borderRadius: "20px",
-                background: "rgba(34, 197, 94, 0.10)",
-                border: "1px solid rgba(34, 197, 94, 0.16)",
-              }}
-            >
-              <p style={{ margin: 0, color: "#86efac", fontWeight: 700 }}>Strengths</p>
-              <ul style={{ margin: "12px 0 0", paddingLeft: "18px", color: "#dcfce7", lineHeight: 1.7 }}>
+          <div className="resume-result__grid">
+            <div className="resume-result-list resume-result-list--good">
+              <p>Strengths</p>
+              <ul>
                 {(result.analysis.strengths || []).map((item, index) => (
                   <li key={`strength-${index}`}>{item}</li>
                 ))}
               </ul>
             </div>
 
-            <div
-              style={{
-                padding: "18px",
-                borderRadius: "20px",
-                background: "rgba(245, 158, 11, 0.10)",
-                border: "1px solid rgba(245, 158, 11, 0.16)",
-              }}
-            >
-              <p style={{ margin: 0, color: "#fcd34d", fontWeight: 700 }}>Issues</p>
-              <ul style={{ margin: "12px 0 0", paddingLeft: "18px", color: "#fef3c7", lineHeight: 1.7 }}>
+            <div className="resume-result-list resume-result-list--warning">
+              <p>Issues</p>
+              <ul>
                 {(result.analysis.issues || []).map((item, index) => (
                   <li key={`issue-${index}`}>{item}</li>
                 ))}
               </ul>
             </div>
 
-            <div
-              style={{
-                padding: "18px",
-                borderRadius: "20px",
-                background: "rgba(56, 189, 248, 0.10)",
-                border: "1px solid rgba(56, 189, 248, 0.16)",
-              }}
-            >
-              <p style={{ margin: 0, color: "#7dd3fc", fontWeight: 700 }}>Suggestions</p>
-              <ul style={{ margin: "12px 0 0", paddingLeft: "18px", color: "#e0f2fe", lineHeight: 1.7 }}>
+            <div className="resume-result-list resume-result-list--info">
+              <p>Suggestions</p>
+              <ul>
                 {(result.analysis.suggestions || []).map((item, index) => (
                   <li key={`suggestion-${index}`}>{item}</li>
                 ))}
@@ -278,26 +252,18 @@ function ResumeUpload({ onAnalysisComplete, onSkip }) {
             </div>
           </div>
 
-          <div style={{ marginTop: "20px", display: "flex", justifyContent: "flex-end" }}>
+          <div className="resume-result__footer">
             <button
+              className="resume-primary-button"
               onClick={() => onAnalysisComplete?.(result)}
-              style={{
-                padding: "14px 24px",
-                border: "none",
-                borderRadius: "999px",
-                background: "linear-gradient(135deg, #38bdf8, #0ea5e9)",
-                color: "#e0f2fe",
-                fontWeight: 700,
-                cursor: "pointer",
-                boxShadow: "0 14px 30px rgba(14, 165, 233, 0.28)",
-              }}
+              type="button"
             >
               Continue With Resume Questions
             </button>
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }
 

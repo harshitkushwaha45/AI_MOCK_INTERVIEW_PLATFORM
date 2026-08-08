@@ -8,6 +8,7 @@ import useSpeechToText from "./hooks/useSpeechToText";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ResumeUpload from "./components/ResumeUpload";
+import { ArenaShell } from "./components/ArenaShell";
 
 const QUESTION_TIME_LIMIT = 120;
 const EMPTY_EMOTION_METRICS = {
@@ -18,16 +19,6 @@ const EMPTY_EMOTION_METRICS = {
 };
 
 function App() {
-  const primaryButtonStyle = {
-    border: "none",
-    borderRadius: "999px",
-    background: "linear-gradient(135deg, #38bdf8, #0ea5e9)",
-    color: "#e0f2fe",
-    fontWeight: 700,
-    cursor: "pointer",
-    boxShadow: "0 14px 30px rgba(14, 165, 233, 0.28)",
-  };
-
   const restartInterview = () => {
     localStorage.removeItem("interviewResults");
     setAnswers([]);
@@ -38,6 +29,15 @@ function App() {
     setCurrentIndex(0);
     setAnswer("");
     setTimeLeft(QUESTION_TIME_LIMIT);
+  };
+
+  const handleAuthExpired = () => {
+    localStorage.removeItem("token");
+    setIsAuthenticated(false);
+    setAuthMode("login");
+    setShowUpload(true);
+    setShowDashboard(false);
+    setSelectedResultId(null);
   };
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -317,7 +317,7 @@ function App() {
       <>
         <button
           onClick={() => setShowDashboard(false)}
-          style={btn}
+          className="floating-back-button"
         >
           ← Back
         </button>
@@ -329,274 +329,163 @@ function App() {
 
   if (showUpload) {
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          background:
-            "radial-gradient(circle at top left, rgba(14,165,233,0.20), transparent 28%), radial-gradient(circle at bottom right, rgba(99,102,241,0.18), transparent 28%), linear-gradient(160deg, #020617 0%, #071226 52%, #020617 100%)",
-          color: "white",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          position: "relative",
-          overflow: "hidden",
-          padding: "32px 24px",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            background:
-              "linear-gradient(rgba(148,163,184,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.06) 1px, transparent 1px)",
-            backgroundSize: "42px 42px",
-            maskImage: "linear-gradient(to bottom, rgba(0,0,0,0.7), transparent)",
-            pointerEvents: "none",
-          }}
-        />
-
-        <div
-          style={{
-            position: "absolute",
-            top: "24px",
-            left: "24px",
-            right: "24px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: "12px",
-            flexWrap: "wrap",
-            zIndex: 2,
-          }}
-        >
-          <div
-            style={{
-              padding: "10px 14px",
-              borderRadius: "999px",
-              background: "rgba(15, 23, 42, 0.78)",
-              border: "1px solid rgba(148,163,184,0.14)",
-              color: "#cbd5e1",
-              fontSize: "13px",
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-            }}
-          >
-            AI Interview Arena
-          </div>
+      <ArenaShell
+        rightAction={
+          <div className="arena-app-actions">
+            <button
+              className="arena-text-button"
+              onClick={() => setShowDashboard(true)}
+              type="button"
+            >
+              Dashboard
+            </button>
 
           <button
             onClick={() => {
               localStorage.removeItem("token");
               window.location.reload();
             }}
-            style={{
-              padding: "12px 18px",
-              border: "1px solid rgba(248, 113, 113, 0.28)",
-              borderRadius: "999px",
-              background: "rgba(127, 29, 29, 0.28)",
-              color: "#fecaca",
-              fontWeight: 700,
-              cursor: "pointer",
-              boxShadow: "0 14px 30px rgba(127, 29, 29, 0.18)",
-            }}
+              className="arena-outline-button"
+              type="button"
           >
             Logout
           </button>
-        </div>
+          </div>
+        }
+      >
 
         <ResumeUpload
           onAnalysisComplete={startResumeInterview}
+          onAuthExpired={handleAuthExpired}
           onSkip={() => setShowUpload(false)}
         />
-      </div>
+      </ArenaShell>
     );
   }
 
-// 🎉 RESULT SCREEN
-if (isFinished) {
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#020617",
-        color: "white",
-        padding: "40px 20px",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-      }}
-    >
-      {/* TOP ACTION */}
-      <button
-        onClick={() => setShowDashboard(true)}
-        style={{
-          position: "fixed",
-          top: "20px",
-          left: "20px",
-          background: "#0ea5e9",
-          border: "none",
-          padding: "10px 16px",
-          borderRadius: "8px",
-          color: "white",
-          cursor: "pointer",
-        }}
-      >
-        📊 Dashboard
-      </button>
+  // RESULT SCREEN
+  if (isFinished) {
+    const summaryScore = Number(summary?.averageScore) || 0;
+    const summaryTone =
+      summaryScore >= 7 ? "good" : summaryScore >= 5 ? "warning" : "danger";
 
-      {/* TITLE */}
-      <h1 style={{ marginBottom: "20px" }}>
-        🎉 Interview Completed
-      </h1>
-
-      {/* SUMMARY CARD */}
-      {summary && (
-        <div
-          style={{
-            background: "#1e293b",
-            padding: "20px",
-            borderRadius: "12px",
-            width: "100%",
-            maxWidth: "700px",
-            marginBottom: "20px",
-            boxShadow: "0 5px 20px rgba(0,0,0,0.3)",
-          }}
-        >
-          <h2 style={{ marginBottom: "10px" }}>📊 Summary</h2>
-
-          <p>
-            <strong>Score:</strong>{" "}
-            <span
-              style={{
-                color:
-                  summary.averageScore >= 7
-                    ? "#22c55e"
-                    : summary.averageScore >= 5
-                    ? "#f59e0b"
-                    : "#ef4444",
-              }}
-            >
-              {summary.averageScore}/10
-            </span>
-          </p>
-
-          <p style={{ marginTop: "8px" }}>💪 {summary.strengths}</p>
-          <p>⚠️ {summary.weaknesses}</p>
-          <p>🚀 {summary.suggestions}</p>
-        </div>
-      )}
-
-      <div
-        style={{
-          background: "#1e293b",
-          padding: "20px",
-          borderRadius: "12px",
-          width: "100%",
-          maxWidth: "700px",
-          marginBottom: "20px",
-          boxShadow: "0 5px 20px rgba(0,0,0,0.3)",
-        }}
-      >
-        <h2 style={{ marginBottom: "14px" }}>Camera Confidence</h2>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-            gap: "12px",
-          }}
-        >
-          {[
-            ["Confidence", emotionMetrics.confidenceScore],
-            ["Eye Contact", emotionMetrics.eyeContactScore],
-            ["Face Visible", emotionMetrics.faceVisibilityScore],
-          ].map(([label, value]) => (
-            <div
-              key={label}
-              style={{
-                padding: "14px",
-                borderRadius: "10px",
-                background: "rgba(15, 23, 42, 0.72)",
-                border: "1px solid rgba(148,163,184,0.12)",
-              }}
-            >
-              <p style={{ margin: 0, color: "#94a3b8", fontSize: "12px" }}>{label}</p>
-              <p style={{ margin: "8px 0 0", fontSize: "24px", fontWeight: 800 }}>
-                {value}
-                <span style={{ fontSize: "12px", color: "#cbd5e1" }}>/100</span>
-              </p>
-            </div>
-          ))}
-          <div
-            style={{
-              padding: "14px",
-              borderRadius: "10px",
-              background: "rgba(15, 23, 42, 0.72)",
-              border: "1px solid rgba(148,163,184,0.12)",
-            }}
+    return (
+      <div className="app-page app-page--results">
+        <div className="app-page__inner app-page__inner--narrow">
+          <button
+            className="front-back-button"
+            onClick={() => setShowDashboard(true)}
+            type="button"
           >
-            <p style={{ margin: 0, color: "#94a3b8", fontSize: "12px" }}>Dominant Emotion</p>
-            <p style={{ margin: "8px 0 0", fontSize: "24px", fontWeight: 800 }}>
-              {emotionMetrics.emotion}
+            Open Dashboard
+          </button>
+
+          <header className="completion-header">
+            <p className="app-eyebrow">Final Review</p>
+            <h1>Interview Completed</h1>
+            <p>
+              Here is your score, camera signal summary, and answer feedback from
+              this practice session.
             </p>
+          </header>
+
+          {summary && (
+            <section className="detail-panel">
+              <div className="completion-summary-top">
+                <div>
+                  <p className="app-eyebrow">Summary</p>
+                  <h2>Session outcome</h2>
+                </div>
+
+                <div className={`score-badge score-badge--${summaryTone}`}>
+                  <span>Score</span>
+                  <strong>
+                    {summary.averageScore}
+                    <small>/10</small>
+                  </strong>
+                </div>
+              </div>
+
+              <div className="summary-grid">
+                <article className="summary-tile summary-tile--good">
+                  <p className="app-eyebrow">Strengths</p>
+                  <span>{summary.strengths}</span>
+                </article>
+                <article className="summary-tile summary-tile--warning">
+                  <p className="app-eyebrow">Weaknesses</p>
+                  <span>{summary.weaknesses}</span>
+                </article>
+                <article className="summary-tile summary-tile--info">
+                  <p className="app-eyebrow">Suggestions</p>
+                  <span>{summary.suggestions}</span>
+                </article>
+              </div>
+            </section>
+          )}
+
+          <section className="detail-panel">
+            <p className="app-eyebrow">Camera Confidence</p>
+            <h2>Interview presence signals</h2>
+
+            <div className="metric-grid">
+              <div className="metric-tile">
+                <p>Confidence</p>
+                <strong>{emotionMetrics.confidenceScore}/100</strong>
+              </div>
+              <div className="metric-tile">
+                <p>Eye Contact</p>
+                <strong>{emotionMetrics.eyeContactScore}/100</strong>
+              </div>
+              <div className="metric-tile">
+                <p>Face Visible</p>
+                <strong>{emotionMetrics.faceVisibilityScore}/100</strong>
+              </div>
+              <div className="metric-tile">
+                <p>Dominant Emotion</p>
+                <strong>{emotionMetrics.emotion}</strong>
+              </div>
+            </div>
+          </section>
+
+          <div className="answer-review-list">
+            {answers.map((item, index) => (
+              <article className="answer-review-card" key={`${item.question}-${index}`}>
+                <span className="question-chip">Question {index + 1}</span>
+                <p className="answer-review-card__label">Prompt</p>
+                <h3>{item.question}</h3>
+                <p className="answer-review-card__label">Your Answer</p>
+                <p>{item.answer}</p>
+                <div className="feedback-box">
+                  <p className="answer-review-card__label">AI Feedback</p>
+                  <p>{item.feedback}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <ScoreChart answers={answers} />
+
+          <div className="completion-actions">
+            <button
+              className="resume-primary-button"
+              onClick={restartInterview}
+              type="button"
+            >
+              Restart Interview
+            </button>
+
+            <button
+              className="resume-secondary-button"
+              onClick={() => setShowDashboard(true)}
+              type="button"
+            >
+              Open Dashboard
+            </button>
           </div>
         </div>
       </div>
-
-      {/* ANSWERS */}
-      {answers.map((item, i) => (
-        <div
-          key={i}
-          style={{
-            background: "#1e293b",
-            padding: "15px",
-            borderRadius: "10px",
-            width: "100%",
-            maxWidth: "700px",
-            marginBottom: "12px",
-          }}
-        >
-          <p><b>Q:</b> {item.question}</p>
-          <p><b>A:</b> {item.answer}</p>
-          <p><b>Feedback:</b> {item.feedback}</p>
-        </div>
-      ))}
-
-      {/* CHART */}
-      <div style={{ width: "100%", maxWidth: "700px", marginTop: "20px" }}>
-        <ScoreChart answers={answers} />
-      </div>
-
-      <button
-        onClick={restartInterview}
-        style={{
-          marginTop: "24px",
-          padding: "14px 24px",
-          fontSize: "15px",
-          ...primaryButtonStyle,
-        }}
-      >
-        Restart Interview
-      </button>
-
-      <button
-        onClick={() => setShowDashboard(true)}
-        style={{
-          marginTop: "14px",
-          padding: "14px 24px",
-          fontSize: "15px",
-          border: "1px solid rgba(56, 189, 248, 0.24)",
-          borderRadius: "999px",
-          background: "rgba(14, 165, 233, 0.16)",
-          color: "#bae6fd",
-          fontWeight: 800,
-          cursor: "pointer",
-        }}
-      >
-        Open Dashboard
-      </button>
-    </div>
-  );
-}
+    );
+  }
 
   // LOADING
   if (!questions.length) return <p>Loading...</p>;
@@ -750,7 +639,7 @@ if (isFinished) {
             <div className="speech-control">
               {!isListening ? (
                 <button
-                  onClick={() => startListening(setAnswer)}
+                  onClick={() => startListening(setAnswer, answer)}
                   className="ui-button ui-button--success"
                 >
                   Start Speaking
@@ -781,16 +670,5 @@ if (isFinished) {
     </div>
   );
 }
-
-const btn = {
-  position: "absolute",
-  top: "20px",
-  right: "20px",
-  padding: "10px 15px",
-  background: "#38bdf8",
-  border: "none",
-  borderRadius: "8px",
-  cursor: "pointer",
-};
 
 export default App;

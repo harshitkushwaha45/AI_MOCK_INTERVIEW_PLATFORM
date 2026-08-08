@@ -1,13 +1,21 @@
 import { useState } from "react";
 import { BASE_URL, readJson } from "../api";
+import { ArenaIcon, ArenaShell } from "../components/ArenaShell";
 
 function Signup({ onLoginClick, onSignupSuccess }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSignup = async () => {
+  const handleSignup = async (event) => {
+    event.preventDefault();
+
     try {
+      setLoading(true);
+      setError("");
+
       const res = await fetch(`${BASE_URL}/api/auth/register`, {
         method: "POST",
         headers: {
@@ -19,12 +27,11 @@ function Signup({ onLoginClick, onSignupSuccess }) {
       const data = await readJson(res);
 
       if (!res.ok) {
-        alert(data.message || "Signup failed");
+        setError(data.message || "Signup failed");
         return;
       }
 
       localStorage.setItem("token", data.token);
-      alert("Signup successful 🎉");
 
       if (onSignupSuccess) {
         onSignupSuccess();
@@ -32,49 +39,78 @@ function Signup({ onLoginClick, onSignupSuccess }) {
 
     } catch (err) {
       console.error(err);
-      alert(err.message || "Server error");
+      setError(err.message || "Server error");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="container">
-      <div className="card">
-        <h2>Create Account 🚀</h2>
+    <ArenaShell
+      rightAction={
+        <div className="arena-auth-switch">
+          <span>Already registered?</span>
+          <button className="arena-outline-button" onClick={onLoginClick} type="button">
+            Log in
+          </button>
+        </div>
+      }
+    >
+      <section className="auth-panel" aria-labelledby="signup-title">
+        <div className="auth-panel__badge">
+          <ArenaIcon name="brand" />
+        </div>
 
-        <input
-          className="input"
-          placeholder="Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-
-        <input
-          className="input"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-
-        <input
-          className="input"
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-
-        <button className="button" onClick={handleSignup}>
-          Signup
-        </button>
-
-        <p style={{ marginTop: "15px" }}>
-          Already have an account?{" "}
-          <span className="link" onClick={onLoginClick}>
-            Login
-          </span>
+        <p className="auth-panel__eyebrow">Create Account</p>
+        <h2 id="signup-title">Set up your interview arena</h2>
+        <p className="auth-panel__copy">
+          Save your progress, resume insights, and performance reports.
         </p>
-      </div>
-    </div>
+
+        <form className="auth-form" onSubmit={handleSignup}>
+          <label>
+            <span>Name</span>
+            <input
+              autoComplete="name"
+              className="auth-input"
+              placeholder="Your name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </label>
+
+          <label>
+            <span>Email</span>
+            <input
+              autoComplete="email"
+              className="auth-input"
+              placeholder="you@example.com"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </label>
+
+          <label>
+            <span>Password</span>
+            <input
+              autoComplete="new-password"
+              className="auth-input"
+              placeholder="Create password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+
+          {error && <div className="auth-alert">{error}</div>}
+
+          <button className="auth-submit" disabled={loading} type="submit">
+            {loading ? "Creating Account..." : "Create Account"}
+          </button>
+        </form>
+      </section>
+    </ArenaShell>
   );
 }
 

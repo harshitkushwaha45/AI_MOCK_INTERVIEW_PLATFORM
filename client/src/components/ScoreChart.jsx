@@ -70,10 +70,10 @@ function ScoreChart({ answers = [] }) {
         display: false,
       },
       tooltip: {
-        backgroundColor: "#0f172a",
+        backgroundColor: "#071126",
         titleColor: "#fff",
-        bodyColor: "#7dd3fc",
-        borderColor: "rgba(56, 189, 248, 0.5)",
+        bodyColor: "#d8d2ff",
+        borderColor: "rgba(111, 89, 245, 0.45)",
         borderWidth: 1,
         cornerRadius: 12,
         padding: 12,
@@ -86,7 +86,7 @@ function ScoreChart({ answers = [] }) {
     scales: {
       x: {
         ticks: {
-          color: "#cbd5e1",
+          color: "#53627e",
           font: { size: 13, weight: "600" },
         },
         grid: {
@@ -98,11 +98,11 @@ function ScoreChart({ answers = [] }) {
         min: 0,
         max: 10,
         ticks: {
-          color: "#94a3b8",
+          color: "#66728a",
           stepSize: 2,
         },
         grid: {
-          color: "rgba(148,163,184,0.08)",
+          color: "rgba(83, 98, 126, 0.12)",
           drawBorder: false,
         },
       },
@@ -119,67 +119,25 @@ function ScoreChart({ answers = [] }) {
   ).toFixed(1);
 
   return (
-    <div
-      style={{
-        marginTop: "34px",
-        padding: "28px",
-        background:
-          "linear-gradient(180deg, rgba(30,41,59,0.92), rgba(15,23,42,0.95))",
-        borderRadius: "26px",
-        boxShadow: "0 18px 40px rgba(2, 6, 23, 0.34)",
-        border: "1px solid rgba(148,163,184,0.12)",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-end",
-          gap: "16px",
-          flexWrap: "wrap",
-          marginBottom: "24px",
-        }}
-      >
+    <div className="chart-card score-chart-card">
+      <div className="chart-card__header">
         <div>
-          <p
-            style={{
-              margin: 0,
-              color: "#7dd3fc",
-              textTransform: "uppercase",
-              letterSpacing: "0.16em",
-              fontSize: "12px",
-            }}
-          >
+          <p className="app-eyebrow">
             Score Insights
           </p>
-          <h2
-            style={{
-              margin: "10px 0 0",
-              fontSize: "28px",
-            }}
-          >
-            Performance Overview
-          </h2>
+          <h2>Performance Overview</h2>
         </div>
 
-        <div
-          style={{
-            padding: "14px 16px",
-            borderRadius: "18px",
-            background: "rgba(15, 23, 42, 0.72)",
-            border: "1px solid rgba(56, 189, 248, 0.16)",
-            minWidth: "130px",
-          }}
-        >
-          <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8" }}>Average</p>
-          <p style={{ margin: "8px 0 0", fontSize: "26px", fontWeight: 800, color: "#f8fafc" }}>
+        <div className="chart-average">
+          <p>Average</p>
+          <strong>
             {averageScore}
-            <span style={{ fontSize: "13px", color: "#cbd5e1" }}>/10</span>
-          </p>
+            <small>/10</small>
+          </strong>
         </div>
       </div>
 
-      <div style={{ height: "300px" }}>
+      <div className="chart-card__body">
         <Bar data={data} options={options} />
       </div>
     </div>

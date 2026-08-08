@@ -1,12 +1,20 @@
 import { useState } from "react";
 import { BASE_URL, readJson } from "../api";
+import { ArenaIcon, ArenaShell } from "../components/ArenaShell";
 
 function Login({ onSignupClick, onLoginSuccess }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = async () => {
+  const handleLogin = async (event) => {
+    event.preventDefault();
+
     try {
+      setLoading(true);
+      setError("");
+
       const res = await fetch(`${BASE_URL}/api/auth/login`, {
         method: "POST",
         headers: {
@@ -18,7 +26,7 @@ function Login({ onSignupClick, onLoginSuccess }) {
       const data = await readJson(res);
 
       if (!res.ok) {
-        alert(data.message || "Login failed");
+        setError(data.message || "Login failed");
         return;
       }
 
@@ -27,42 +35,67 @@ function Login({ onSignupClick, onLoginSuccess }) {
 
     } catch (err) {
       console.error(err);
-      alert(err.message || "Server error");
+      setError(err.message || "Server error");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="container">
-      <div className="card">
-        <h2>Welcome Back 👋</h2>
+    <ArenaShell
+      rightAction={
+        <div className="arena-auth-switch">
+          <span>New here?</span>
+          <button className="arena-outline-button" onClick={onSignupClick} type="button">
+            Sign up
+          </button>
+        </div>
+      }
+    >
+      <section className="auth-panel" aria-labelledby="login-title">
+        <div className="auth-panel__badge">
+          <ArenaIcon name="brand" />
+        </div>
 
-        <input
-          className="input"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-
-        <input
-          className="input"
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-
-        <button className="button" onClick={handleLogin}>
-          Login
-        </button>
-
-        <p style={{ marginTop: "15px" }}>
-          Don’t have an account?{" "}
-          <span className="link" onClick={onSignupClick}>
-            Signup
-          </span>
+        <p className="auth-panel__eyebrow">Welcome Back</p>
+        <h2 id="login-title">Log in to start practicing</h2>
+        <p className="auth-panel__copy">
+          Continue to resume analysis, personalized questions, and instant feedback.
         </p>
-      </div>
-    </div>
+
+        <form className="auth-form" onSubmit={handleLogin}>
+          <label>
+            <span>Email</span>
+            <input
+              autoComplete="email"
+              className="auth-input"
+              placeholder="you@example.com"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </label>
+
+          <label>
+            <span>Password</span>
+            <input
+              autoComplete="current-password"
+              className="auth-input"
+              placeholder="Enter password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+
+          {error && <div className="auth-alert">{error}</div>}
+
+          <button className="auth-submit" disabled={loading} type="submit">
+            {loading ? "Logging in..." : "Login"}
+          </button>
+        </form>
+      </section>
+    </ArenaShell>
   );
 }
 

@@ -29,14 +29,14 @@ const chartOptions = {
   plugins: {
     legend: {
       labels: {
-        color: "#cbd5e1",
+        color: "#53627e",
       },
     },
     tooltip: {
-      backgroundColor: "#0f172a",
+      backgroundColor: "#071126",
       titleColor: "#fff",
-      bodyColor: "#7dd3fc",
-      borderColor: "rgba(56, 189, 248, 0.5)",
+      bodyColor: "#d8d2ff",
+      borderColor: "rgba(111, 89, 245, 0.45)",
       borderWidth: 1,
       cornerRadius: 12,
       padding: 12,
@@ -44,14 +44,14 @@ const chartOptions = {
   },
   scales: {
     x: {
-      ticks: { color: "#cbd5e1" },
+      ticks: { color: "#53627e" },
       grid: { display: false },
     },
     y: {
       min: 0,
       max: 10,
-      ticks: { color: "#94a3b8", stepSize: 2 },
-      grid: { color: "rgba(148,163,184,0.08)" },
+      ticks: { color: "#66728a", stepSize: 2 },
+      grid: { color: "rgba(83, 98, 126, 0.12)" },
     },
   },
 };
@@ -98,30 +98,19 @@ function SkillAnalyticsChart({ scores = {}, progress = [], title = "Skill Analyt
   };
 
   return (
-    <div
-      style={{
-        padding: "24px",
-        borderRadius: "24px",
-        background:
-          "linear-gradient(180deg, rgba(30,41,59,0.92), rgba(15,23,42,0.95))",
-        border: "1px solid rgba(148,163,184,0.12)",
-        boxShadow: "0 18px 40px rgba(2, 6, 23, 0.34)",
-      }}
-    >
-      <p
-        style={{
-          margin: 0,
-          color: "#7dd3fc",
-          textTransform: "uppercase",
-          letterSpacing: "0.16em",
-          fontSize: "12px",
-        }}
-      >
+    <div className="chart-card">
+      <p className="app-eyebrow">
         {hasProgress ? "Progress Chart" : "Skill Cards"}
       </p>
-      <h2 style={{ margin: "10px 0 18px", fontSize: "28px" }}>{title}</h2>
+      <h2>{title}</h2>
 
-      <div style={{ height: hasProgress ? "320px" : "300px" }}>
+      <div
+        className={
+          hasProgress
+            ? "chart-card__body chart-card__body--progress"
+            : "chart-card__body"
+        }
+      >
         {hasProgress ? (
           <Line data={progressData} options={chartOptions} />
         ) : (
