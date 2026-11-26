@@ -1,10 +1,12 @@
 const RENDER_BACKEND_URL = "https://ai-mock-interview-platform-elvw.onrender.com";
 const RENDER_FRONTEND_HOST = "ai-mock-interview-platform-1-ofb2.onrender.com";
-const isConfiguredRenderFrontend =
-  typeof window !== "undefined" && window.location.hostname === RENDER_FRONTEND_HOST;
+const hostname = typeof window !== "undefined" ? window.location.hostname : "";
+const isLocalHost = hostname === "localhost" || hostname === "127.0.0.1";
+const isConfiguredRenderFrontend = hostname === RENDER_FRONTEND_HOST;
 
-const rawBaseUrl =
-  import.meta.env.VITE_API_URL || (isConfiguredRenderFrontend ? RENDER_BACKEND_URL : "");
+const rawBaseUrl = isLocalHost
+  ? ""
+  : import.meta.env.VITE_API_URL || (isConfiguredRenderFrontend ? RENDER_BACKEND_URL : "");
 
 export const BASE_URL = rawBaseUrl.replace(/\/$/, "");
 
@@ -23,11 +25,14 @@ export const readJson = async (response) => {
 };
 
 export const authFetch = (url, options = {}) => {
+  const token = localStorage.getItem("token");
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+
   return fetch(`${BASE_URL}${url}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${localStorage.getItem("token")}`,
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {}),
     },
   });

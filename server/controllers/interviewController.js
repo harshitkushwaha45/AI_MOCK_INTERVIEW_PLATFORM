@@ -1,6 +1,8 @@
 const Result = require("../models/Result");
 const { getInterviewEvaluation } = require("../services/aiService");
 
+const ALLOWED_CATEGORIES = ["hr", "technical", "resume"];
+
 const clampScore = (value) => {
   const score = Number(value);
 
@@ -61,6 +63,7 @@ const generateFeedback = async (req, res, next) => {
       return res.status(400).json({ message: "Answers are required" });
     }
 
+    const normalizedCategory = ALLOWED_CATEGORIES.includes(category) ? category : "hr";
     const normalizedAnswers = answers.map((item) => ({
       question: item?.question || "",
       answer: item?.answer || "No answer",
@@ -68,7 +71,7 @@ const generateFeedback = async (req, res, next) => {
 
     const { results, summary, skillAnalytics } = await getInterviewEvaluation(
       normalizedAnswers,
-      category || "hr"
+      normalizedCategory
     );
 
     // ✅ SAVE TO DATABASE WITH USER
@@ -76,7 +79,7 @@ const generateFeedback = async (req, res, next) => {
       user: req.user._id, // 🔥 JWT USER LINK
       answers: results,
       summary,
-      category,
+      category: normalizedCategory,
       emotionMetrics: normalizeEmotionMetrics(emotionMetrics),
       skillAnalytics: normalizeSkillAnalytics(skillAnalytics),
     });

@@ -234,11 +234,16 @@ function EmotionCamera({ onMetricsChange, compact = false }) {
         setCameraError("");
         setStatus("Loading face models");
 
-        modelLoadPromise ||= Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-          faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
-          faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
-        ]);
+        if (!modelLoadPromise) {
+          modelLoadPromise = Promise.all([
+            faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+            faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
+            faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
+          ]).catch((err) => {
+            modelLoadPromise = null;
+            throw err;
+          });
+        }
 
         await modelLoadPromise;
 
@@ -344,6 +349,7 @@ function EmotionCamera({ onMetricsChange, compact = false }) {
           className={`ui-button ${
             cameraEnabled ? "ui-button--ghost" : "ui-button--danger"
           }`}
+          type="button"
         >
           {cameraEnabled ? "Pause Camera" : "Start Camera"}
         </button>
@@ -374,6 +380,7 @@ function EmotionCamera({ onMetricsChange, compact = false }) {
             window.setTimeout(() => setCameraEnabled(true), 120);
           }}
           className="ui-button ui-button--success"
+          type="button"
         >
           Retry Camera
         </button>

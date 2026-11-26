@@ -27,8 +27,30 @@ const upload = multer({
   },
 });
 
+const uploadResumeMiddleware = (req, res, next) => {
+  upload.single("resume")(req, res, (err) => {
+    if (!err) {
+      return next();
+    }
+
+    if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({ message: "PDF must be smaller than 5MB" });
+    }
+
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ message: err.message });
+    }
+
+    if (err.message === "Only PDF files are allowed") {
+      return res.status(400).json({ message: err.message });
+    }
+
+    return next(err);
+  });
+};
+
 // 📄 Upload + extract text
-router.post("/upload", protect, upload.single("resume"), async (req, res) => {
+router.post("/upload", protect, uploadResumeMiddleware, async (req, res) => {
   let parser;
 
   try {
@@ -59,15 +81,6 @@ router.post("/upload", protect, upload.single("resume"), async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-
-    if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
-      return res.status(400).json({ message: "PDF must be smaller than 5MB" });
-    }
-
-    if (err.message === "Only PDF files are allowed") {
-      return res.status(400).json({ message: err.message });
-    }
-
     res.status(500).json({ message: "PDF processing failed" });
   } finally {
     if (parser && typeof parser.destroy === "function") {

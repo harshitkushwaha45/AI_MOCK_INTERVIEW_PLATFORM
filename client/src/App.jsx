@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BASE_URL, authFetch, readJson } from "./api";
 import ScoreChart from "./components/ScoreChart";
 import EmotionCamera from "./components/EmotionCamera";
@@ -10,7 +10,6 @@ import Signup from "./pages/Signup";
 import ResumeUpload from "./components/ResumeUpload";
 import { ArenaShell } from "./components/ArenaShell";
 
-const QUESTION_TIME_LIMIT = 120;
 const EMPTY_EMOTION_METRICS = {
   confidenceScore: 0,
   eyeContactScore: 0,
@@ -18,44 +17,57 @@ const EMPTY_EMOTION_METRICS = {
   emotion: "Unknown",
 };
 
-function App() {
-  const restartInterview = () => {
-    localStorage.removeItem("interviewResults");
-    setAnswers([]);
-    setSummary(null);
-    setFeedbackError("");
-    setEmotionMetrics(EMPTY_EMOTION_METRICS);
-    setIsFinished(false);
-    setCurrentIndex(0);
-    setAnswer("");
-    setTimeLeft(QUESTION_TIME_LIMIT);
-  };
+const hasStoredToken = () => {
+  const token = localStorage.getItem("token");
+  return Boolean(token && token !== "null" && token !== "undefined");
+};
 
-  const handleAuthExpired = () => {
-    localStorage.removeItem("token");
-    setIsAuthenticated(false);
-    setAuthMode("login");
-    setShowUpload(true);
-    setShowDashboard(false);
-    setSelectedResultId(null);
-  };
+const getInitialSavedResults = () => {
+  if (!hasStoredToken()) {
+    localStorage.removeItem("interviewResults");
+    return null;
+  }
+
+  const saved = localStorage.getItem("interviewResults");
+  if (!saved) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(saved);
+    if (Array.isArray(parsed?.results) && parsed.results.length && parsed?.summary) {
+      return parsed;
+    }
+  } catch {
+    // Ignore malformed saved results.
+  }
+
+  localStorage.removeItem("interviewResults");
+  return null;
+};
+
+function App() {
+  const [initialSaved] = useState(getInitialSavedResults);
   const [questions, setQuestions] = useState([]);
+  const [questionsLoading, setQuestionsLoading] = useState(false);
+  const [questionsError, setQuestionsError] = useState("");
+  const [questionsReloadTick, setQuestionsReloadTick] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answer, setAnswer] = useState("");
-  const [answers, setAnswers] = useState([]);
-  const [isFinished, setIsFinished] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(QUESTION_TIME_LIMIT);
+  const [answers, setAnswers] = useState(() => initialSaved?.results || []);
+  const [isFinished, setIsFinished] = useState(() => Boolean(initialSaved));
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   const [category, setCategory] = useState("hr");
-  const [summary, setSummary] = useState(null);
+  const [summary, setSummary] = useState(() => initialSaved?.summary || null);
   const [feedbackError, setFeedbackError] = useState("");
-  const [emotionMetrics, setEmotionMetrics] = useState(EMPTY_EMOTION_METRICS);
+  const [emotionMetrics, setEmotionMetrics] = useState(
+    () => initialSaved?.emotionMetrics || EMPTY_EMOTION_METRICS
+  );
   const [showDashboard, setShowDashboard] = useState(false);
   const [selectedResultId, setSelectedResultId] = useState(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(() =>
-    Boolean(localStorage.getItem("token"))
-  );
+  const [isAuthenticated, setIsAuthenticated] = useState(hasStoredToken);
   const [authMode, setAuthMode] = useState("login");
-  const [showUpload, setShowUpload] = useState(true);
+  const [showUpload, setShowUpload] = useState(() => !initialSaved);
   const [isVoiceMuted, setIsVoiceMuted] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState(() =>
     "speechSynthesis" in window ? "Voice ready" : "Voice unavailable"
@@ -70,6 +82,77 @@ function App() {
     if ("speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
+  };
+
+  const resetSessionState = () => {
+    stopListening();
+    stopQuestionSpeech();
+    spokenQuestionKeyRef.current = "";
+    setQuestions([]);
+    setQuestionsError("");
+    setQuestionsLoading(false);
+    setCurrentIndex(0);
+    setAnswer("");
+    setAnswers([]);
+    setSummary(null);
+    setFeedbackError("");
+    setEmotionMetrics(EMPTY_EMOTION_METRICS);
+    setIsFinished(false);
+    setIsSubmittingFeedback(false);
+    setCategory("hr");
+  };
+
+  const handleAuthExpired = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("interviewResults");
+    resetSessionState();
+    setIsAuthenticated(false);
+    setAuthMode("login");
+    setShowUpload(true);
+    setShowDashboard(false);
+    setSelectedResultId(null);
+  };
+
+  const handleLogout = () => {
+    handleAuthExpired();
+  };
+
+  const restartInterview = () => {
+    localStorage.removeItem("interviewResults");
+    stopListening();
+    stopQuestionSpeech();
+    spokenQuestionKeyRef.current = "";
+    setAnswers([]);
+    setSummary(null);
+    setFeedbackError("");
+    setEmotionMetrics(EMPTY_EMOTION_METRICS);
+    setIsFinished(false);
+    setIsSubmittingFeedback(false);
+    setCurrentIndex(0);
+    setAnswer("");
+
+    if (category === "resume" && !questions.length) {
+      setCategory("hr");
+      setShowUpload(true);
+    }
+  };
+
+  const openResumeUpload = () => {
+    localStorage.removeItem("interviewResults");
+    stopListening();
+    stopQuestionSpeech();
+    spokenQuestionKeyRef.current = "";
+    setAnswer("");
+    setAnswers([]);
+    setSummary(null);
+    setFeedbackError("");
+    setEmotionMetrics(EMPTY_EMOTION_METRICS);
+    setIsFinished(false);
+    setIsSubmittingFeedback(false);
+    setCurrentIndex(0);
+    setShowDashboard(false);
+    setSelectedResultId(null);
+    setShowUpload(true);
   };
 
   const toggleVoiceMute = () => {
@@ -88,126 +171,131 @@ function App() {
     });
   };
 
-  // LOAD SAVED RESULTS
-  useEffect(() => {
-    const saved = localStorage.getItem("interviewResults");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-
-        if (Array.isArray(parsed?.results) && parsed.results.length && parsed?.summary) {
-          setAnswers(parsed.results);
-          setSummary(parsed.summary);
-          setIsFinished(true);
-        } else {
-          localStorage.removeItem("interviewResults");
-        }
-      } catch {
-        localStorage.removeItem("interviewResults");
-      }
-    }
-  }, []);
-
   // FETCH QUESTIONS
   useEffect(() => {
-    if (showUpload || category === "resume") {
+    if (!isAuthenticated || showUpload || isFinished || category === "resume") {
       return;
     }
 
-    fetch(`${BASE_URL}/api/questions?category=${category}`)
-      .then((res) => readJson(res))
-      .then((data) => {
-        setQuestions(Array.isArray(data) ? data : []);
+    let cancelled = false;
+
+    const loadQuestions = async () => {
+      try {
+        setQuestionsLoading(true);
+        setQuestionsError("");
+        stopListening();
+        stopQuestionSpeech();
+        spokenQuestionKeyRef.current = "";
+
+        const res = await fetch(`${BASE_URL}/api/questions?category=${category}`);
+        const data = await readJson(res);
+
+        if (!res.ok) {
+          throw new Error(data?.message || "Failed to load interview questions");
+        }
+
+        if (cancelled) return;
+
+        const nextQuestions = Array.isArray(data) ? data : [];
+        if (!nextQuestions.length) {
+          throw new Error("No questions were returned for this category.");
+        }
+
+        setQuestions(nextQuestions);
         setCurrentIndex(0);
+        setAnswer("");
         setAnswers([]);
         setSummary(null);
         setFeedbackError("");
         setEmotionMetrics(EMPTY_EMOTION_METRICS);
         setIsFinished(false);
-        setTimeLeft(QUESTION_TIME_LIMIT);
-      })
-      .catch(console.error);
-  }, [category, showUpload]);
+      } catch (err) {
+        if (cancelled) return;
+        console.error(err);
+        setQuestions([]);
+        setQuestionsError(err.message || "Could not load interview questions.");
+      } finally {
+        if (!cancelled) {
+          setQuestionsLoading(false);
+        }
+      }
+    };
+
+    loadQuestions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [category, isAuthenticated, isFinished, questionsReloadTick, showUpload, stopListening]);
 
   // NEXT
   const handleNext = async () => {
+    if (isSubmittingFeedback || !questions.length) {
+      return;
+    }
+
+    stopListening();
+    stopQuestionSpeech();
+
     const updatedAnswers = [
       ...answers,
       {
         question: questions[currentIndex]?.question || "",
-        answer: answer || "No answer",
+        answer: answer.trim() || "No answer",
       },
     ];
 
-    setAnswers(updatedAnswers);
-    setAnswer("");
     setFeedbackError("");
-    setTimeLeft(QUESTION_TIME_LIMIT);
-    stopQuestionSpeech();
 
     if (currentIndex < questions.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-    } else {
-      try {
-        const res = await authFetch("/api/interview/feedback", {
-          method: "POST",
-          body: JSON.stringify({
-            answers: updatedAnswers,
-            category,
-            emotionMetrics,
-          }),
-        });
-
-        const text = await res.text();
-        let data = {};
-
-        try {
-          data = text ? JSON.parse(text) : {};
-        } catch {
-          throw new Error("Server returned an invalid feedback response");
-        }
-
-        if (!res.ok) {
-          throw new Error(data.message || "Feedback generation failed");
-        }
-
-        localStorage.setItem("interviewResults", JSON.stringify(data));
-
-        setAnswers(data.results || []);
-        setSummary(data.summary || null);
-        setEmotionMetrics(data.emotionMetrics || emotionMetrics);
-        setIsFinished(true);
-      } catch (err) {
-        console.error(err);
-        setFeedbackError(
-          err.message || "Could not generate feedback. Please try finishing again."
-        );
-      }
-    }
-  };
-
-  const handleTimerExpired = useEffectEvent(() => {
-    handleNext();
-  });
-
-  // TIMER
-  useEffect(() => {
-    if (isFinished) return;
-
-    if (timeLeft === 0) {
-      handleTimerExpired();
+      setAnswers(updatedAnswers);
+      setAnswer("");
+      setCurrentIndex((prev) => prev + 1);
       return;
     }
 
-    const timer = setTimeout(() => {
-      setTimeLeft((prev) => prev - 1);
-    }, 1000);
+    try {
+      setIsSubmittingFeedback(true);
 
-    return () => clearTimeout(timer);
-  }, [timeLeft, isFinished]);
+      const res = await authFetch("/api/interview/feedback", {
+        method: "POST",
+        body: JSON.stringify({
+          answers: updatedAnswers,
+          category,
+          emotionMetrics,
+        }),
+      });
+
+      if (res.status === 401 || res.status === 403) {
+        handleAuthExpired();
+        return;
+      }
+
+      const data = await readJson(res);
+
+      if (!res.ok) {
+        throw new Error(data.message || "Feedback generation failed");
+      }
+
+      localStorage.setItem("interviewResults", JSON.stringify(data));
+
+      setAnswers(data.results || []);
+      setSummary(data.summary || null);
+      setEmotionMetrics(data.emotionMetrics || emotionMetrics);
+      setAnswer("");
+      setIsFinished(true);
+    } catch (err) {
+      console.error(err);
+      setFeedbackError(
+        err.message || "Could not generate feedback. Please try finishing again."
+      );
+    } finally {
+      setIsSubmittingFeedback(false);
+    }
+  };
 
   useEffect(() => {
-    if (!currentQuestionText || showUpload || isFinished) {
+    if (!currentQuestionText || showUpload || isFinished || showDashboard) {
       return;
     }
 
@@ -251,6 +339,7 @@ function App() {
     currentQuestionText,
     isFinished,
     isVoiceMuted,
+    showDashboard,
     showUpload,
   ]);
 
@@ -269,7 +358,11 @@ function App() {
     }
 
     localStorage.removeItem("interviewResults");
+    stopListening();
+    stopQuestionSpeech();
     setQuestions(resumeQuestions);
+    setQuestionsError("");
+    setQuestionsLoading(false);
     setCategory("resume");
     setCurrentIndex(0);
     setAnswer("");
@@ -278,7 +371,7 @@ function App() {
     setFeedbackError("");
     setEmotionMetrics(EMPTY_EMOTION_METRICS);
     setIsFinished(false);
-    setTimeLeft(QUESTION_TIME_LIMIT);
+    setIsSubmittingFeedback(false);
     spokenQuestionKeyRef.current = "";
     setShowUpload(false);
   };
@@ -309,6 +402,7 @@ function App() {
         <ResultDetail
           resultId={selectedResultId}
           onBack={() => setSelectedResultId(null)}
+          onAuthExpired={handleAuthExpired}
         />
       );
     }
@@ -318,11 +412,15 @@ function App() {
         <button
           onClick={() => setShowDashboard(false)}
           className="floating-back-button"
+          type="button"
         >
           ← Back
         </button>
 
-        <Dashboard onSelect={setSelectedResultId} />
+        <Dashboard
+          onSelect={setSelectedResultId}
+          onAuthExpired={handleAuthExpired}
+        />
       </>
     );
   }
@@ -340,24 +438,23 @@ function App() {
               Dashboard
             </button>
 
-          <button
-            onClick={() => {
-              localStorage.removeItem("token");
-              window.location.reload();
-            }}
+            <button
+              onClick={handleLogout}
               className="arena-outline-button"
               type="button"
-          >
-            Logout
-          </button>
+            >
+              Logout
+            </button>
           </div>
         }
       >
-
         <ResumeUpload
           onAnalysisComplete={startResumeInterview}
           onAuthExpired={handleAuthExpired}
-          onSkip={() => setShowUpload(false)}
+          onSkip={() => {
+            setCategory((prev) => (prev === "resume" ? "hr" : prev));
+            setShowUpload(false);
+          }}
         />
       </ArenaShell>
     );
@@ -476,6 +573,14 @@ function App() {
 
             <button
               className="resume-secondary-button"
+              onClick={openResumeUpload}
+              type="button"
+            >
+              Upload Resume
+            </button>
+
+            <button
+              className="resume-secondary-button"
               onClick={() => setShowDashboard(true)}
               type="button"
             >
@@ -487,19 +592,38 @@ function App() {
     );
   }
 
-  // LOADING
-  if (!questions.length) return <p>Loading...</p>;
+  // LOADING OR ERROR
+  if (questionsLoading || !questions.length) {
+    return (
+      <div className="app-page">
+        <div className="app-page__inner app-page__inner--narrow">
+          <div className={`status-panel${questionsError ? " status-panel--danger" : ""}`}>
+            {questionsError || "Loading interview questions..."}
+          </div>
 
-  const timePercent = Math.max(
-    0,
-    Math.min(100, (timeLeft / QUESTION_TIME_LIMIT) * 100)
-  );
-  const timeState =
-    timeLeft > QUESTION_TIME_LIMIT / 2
-      ? "steady"
-      : timeLeft > QUESTION_TIME_LIMIT / 4
-      ? "warning"
-      : "danger";
+          {questionsError && (
+            <div className="completion-actions">
+              <button
+                className="resume-primary-button"
+                onClick={() => setQuestionsReloadTick((prev) => prev + 1)}
+                type="button"
+              >
+                Retry
+              </button>
+              <button
+                className="resume-secondary-button"
+                onClick={openResumeUpload}
+                type="button"
+              >
+                Back to Resume Upload
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const voiceState = isVoiceMuted
     ? "muted"
     : voiceStatus === "Reading question aloud"
@@ -518,16 +642,15 @@ function App() {
           <button
             onClick={() => setShowDashboard(true)}
             className="ui-button ui-button--primary"
+            type="button"
           >
             Dashboard
           </button>
 
           <button
-            onClick={() => {
-              localStorage.removeItem("token");
-              window.location.reload();
-            }}
+            onClick={handleLogout}
             className="ui-button ui-button--danger"
+            type="button"
           >
             Logout
           </button>
@@ -549,34 +672,32 @@ function App() {
             </div>
           </div>
 
-          <div className="interview-progress">
-          <div
-              className={`interview-progress__bar interview-progress__bar--${timeState}`}
-            style={{
-                width: `${timePercent}%`,
-            }}
-          />
-        </div>
-
           <div className="interview-meta-row">
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            disabled={category === "resume"}
+            <button
+              onClick={openResumeUpload}
+              className="ui-button ui-button--ghost"
+              type="button"
+            >
+              Upload Resume
+            </button>
+
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
               className="interview-select"
-          >
-            {category === "resume" && (
-              <option value="resume">Resume Based</option>
-            )}
-            <option value="hr">HR Interview</option>
-            <option value="technical">Technical Interview</option>
-          </select>
-        </div>
+            >
+              {category === "resume" && (
+                <option value="resume">Resume Based</option>
+              )}
+              <option value="hr">HR Interview</option>
+              <option value="technical">Technical Interview</option>
+            </select>
+          </div>
 
           <article className="prompt-card">
             <p className="panel-eyebrow panel-eyebrow--muted">Current Prompt</p>
             <h2 className="prompt-card__question">
-            {questions[currentIndex]?.question}
+              {questions[currentIndex]?.question}
             </h2>
           </article>
 
@@ -590,29 +711,23 @@ function App() {
               </div>
             </div>
 
-          <textarea
-            value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
+            <textarea
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
               rows={5}
-            placeholder="Start speaking or type your response here..."
+              placeholder="Start speaking or type your response here..."
               className="answer-textarea"
-          />
+            />
 
-          {feedbackError && (
+            {feedbackError && (
               <div className="feedback-alert">
-              {feedbackError}
-            </div>
-          )}
+                {feedbackError}
+              </div>
+            )}
           </section>
         </section>
 
         <aside className="interview-panel interview-panel--side">
-          <section className="timer-card">
-            <p className="panel-eyebrow panel-eyebrow--muted">Time Left</p>
-            <strong>{timeLeft}s</strong>
-            <span>Keep the answer focused.</span>
-          </section>
-
           <section className={`voice-card voice-card--${voiceState}`}>
             <div className="voice-card__status">
               <span aria-hidden="true" />
@@ -628,6 +743,7 @@ function App() {
               className={`ui-button ${
                 isVoiceMuted ? "ui-button--danger" : "ui-button--ghost"
               }`}
+              type="button"
             >
               {isVoiceMuted ? "Unmute Voice" : "Mute Voice"}
             </button>
@@ -641,6 +757,7 @@ function App() {
                 <button
                   onClick={() => startListening(setAnswer, answer)}
                   className="ui-button ui-button--success"
+                  type="button"
                 >
                   Start Speaking
                 </button>
@@ -648,6 +765,7 @@ function App() {
                 <button
                   onClick={stopListening}
                   className="ui-button ui-button--danger"
+                  type="button"
                 >
                   Stop
                 </button>
@@ -660,9 +778,15 @@ function App() {
 
             <button
               onClick={handleNext}
+              disabled={isSubmittingFeedback}
               className="ui-button ui-button--primary ui-button--next"
+              type="button"
             >
-              {currentIndex === questions.length - 1 ? "Finish" : "Next"}
+              {isSubmittingFeedback
+                ? "Evaluating..."
+                : currentIndex === questions.length - 1
+                ? "Finish"
+                : "Next"}
             </button>
           </footer>
         </aside>

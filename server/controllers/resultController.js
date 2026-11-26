@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Result = require("../models/Result");
 
 const SKILL_LABELS = {
@@ -24,6 +25,12 @@ const getResults = async (req, res, next) => {
 // 🔥 GET SINGLE RESULT BY ID
 const getResultById = async (req, res, next) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(404).json({
+        message: "Result not found",
+      });
+    }
+
     const result = await Result.findOne({
       _id: req.params.id,
       user: req.user._id,

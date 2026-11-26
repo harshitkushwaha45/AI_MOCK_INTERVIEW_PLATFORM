@@ -224,7 +224,7 @@ const titleCaseSkill = (skill) => {
   return labels[skill] || skill;
 };
 
-const buildRecommendation = (skill) => {
+const buildRecommendation = (skill, fallbackLabel = "") => {
   const recommendations = {
     communication: "Improve communication with structured answers using Situation, Action, and Result.",
     confidence: "Practice answering aloud with steady pacing and concise examples.",
@@ -234,7 +234,19 @@ const buildRecommendation = (skill) => {
     javascript: "Strengthen JavaScript fundamentals like closures, async code, arrays, and event loop behavior.",
   };
 
-  return recommendations[skill] || `Practice ${titleCaseSkill(skill)} with project-specific examples.`;
+  if (recommendations[skill]) {
+    return recommendations[skill];
+  }
+
+  const label = skill
+    ? titleCaseSkill(skill)
+    : typeof fallbackLabel === "string"
+    ? fallbackLabel.trim()
+    : "";
+
+  return label
+    ? `Practice ${label} with project-specific examples.`
+    : "Practice answering with structured, project-specific examples.";
 };
 
 const buildFallbackSkillAnalytics = (answers = [], results = []) => {
@@ -283,7 +295,7 @@ const buildFallbackSkillAnalytics = (answers = [], results = []) => {
     : ranked.slice(-2).map((item) => titleCaseSkill(item.skill))
   ).map((label) => {
     const skill = SKILL_KEYS.find((key) => titleCaseSkill(key) === label);
-    return buildRecommendation(skill);
+    return buildRecommendation(skill, label);
   });
 
   return {
@@ -331,7 +343,7 @@ const normalizeSkillAnalytics = (answers = [], results = [], parsed = {}) => {
         .slice(0, 5)
     : (weakAreas.length ? weakAreas : fallback.weakAreas).map((label) => {
         const skill = SKILL_KEYS.find((key) => titleCaseSkill(key) === label);
-        return buildRecommendation(skill);
+        return buildRecommendation(skill, label);
       });
 
   return {
@@ -423,10 +435,11 @@ ${JSON.stringify(answers)}
     const results = normalizeFeedbackResults(answers, parsed);
     const fallbackSummary = buildFallbackSummary(results);
     const skillAnalytics = normalizeSkillAnalytics(answers, results, parsed);
+    const parsedAverage = Number(parsed?.summary?.averageScore);
     const summary = {
-      averageScore: Number(
-        Number(parsed?.summary?.averageScore ?? fallbackSummary.averageScore).toFixed(1)
-      ),
+      averageScore: Number.isFinite(parsedAverage)
+        ? Number(Math.max(0, Math.min(10, parsedAverage)).toFixed(1))
+        : fallbackSummary.averageScore,
       strengths:
         typeof parsed?.summary?.strengths === "string" && parsed.summary.strengths.trim()
           ? parsed.summary.strengths.trim()

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { authFetch, readJson } from "../api";
 import ScoreChart from "../components/ScoreChart";
 import SkillAnalyticsChart from "../components/SkillAnalyticsChart";
@@ -9,27 +9,74 @@ const getScoreTone = (score) => {
   return "danger";
 };
 
-function ResultDetail({ resultId, onBack }) {
+function ResultDetail({ resultId, onBack, onAuthExpired }) {
   const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const onAuthExpiredRef = useRef(onAuthExpired);
 
   useEffect(() => {
+    onAuthExpiredRef.current = onAuthExpired;
+  }, [onAuthExpired]);
+
+  useEffect(() => {
+    let cancelled = false;
+
     const fetchData = async () => {
       try {
+        setData(null);
+        setError("");
+
         const res = await authFetch(`/api/results/${resultId}`);
-        const data = await readJson(res);
-        setData(data);
+
+        if (res.status === 401 || res.status === 403) {
+          onAuthExpiredRef.current?.();
+          return;
+        }
+
+        const payload = await readJson(res);
+
+        if (!res.ok) {
+          throw new Error(payload.message || "Could not load interview details");
+        }
+
+        if (!cancelled) {
+          setData(payload);
+        }
       } catch (err) {
         console.error(err);
+        if (!cancelled) {
+          setError(err.message || "Could not load interview details");
+        }
       }
     };
 
     fetchData();
+
+    return () => {
+      cancelled = true;
+    };
   }, [resultId]);
+
+  if (error) {
+    return (
+      <div className="app-page">
+        <div className="app-page__inner app-page__inner--narrow">
+          <button className="front-back-button" onClick={onBack} type="button">
+            ← Back
+          </button>
+          <div className="status-panel status-panel--danger">{error}</div>
+        </div>
+      </div>
+    );
+  }
 
   if (!data) {
     return (
       <div className="app-page">
         <div className="app-page__inner app-page__inner--narrow">
+          <button className="front-back-button" onClick={onBack} type="button">
+            ← Back
+          </button>
           <div className="status-panel">Loading interview details...</div>
         </div>
       </div>

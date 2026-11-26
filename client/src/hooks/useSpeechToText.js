@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 
 const useSpeechToText = () => {
   const [isListening, setIsListening] = useState(false);
@@ -12,10 +12,30 @@ const useSpeechToText = () => {
       shouldListenRef.current = false;
 
       if (recognitionRef.current) {
-        recognitionRef.current.stop();
+        try {
+          recognitionRef.current.stop();
+        } catch {
+          // Ignore cleanup errors if speech recognition already stopped.
+        }
         recognitionRef.current = null;
       }
     };
+  }, []);
+
+  const stopListening = useCallback(() => {
+    shouldListenRef.current = false;
+    committedTranscriptRef.current = "";
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (error) {
+        console.error("Failed to stop speech recognition:", error);
+      }
+      recognitionRef.current = null;
+    }
+
+    setIsListening(false);
   }, []);
 
   const startListening = (onResult, initialText = "") => {
@@ -81,7 +101,6 @@ const useSpeechToText = () => {
       }
 
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-        shouldListenRef.current = false;
         stopListening();
       }
     };
@@ -105,21 +124,16 @@ const useSpeechToText = () => {
       setIsListening(true);
     };
 
-    recognition.start();
-
-    recognitionRef.current = recognition;
-    setIsListening(true);
-  };
-
-  const stopListening = () => {
-    shouldListenRef.current = false;
-
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
+    try {
+      recognition.start();
+      recognitionRef.current = recognition;
+      setIsListening(true);
+    } catch (error) {
+      console.error("Failed to start speech recognition:", error);
+      shouldListenRef.current = false;
       recognitionRef.current = null;
+      setIsListening(false);
     }
-
-    setIsListening(false);
   };
 
   return { isListening, startListening, stopListening };

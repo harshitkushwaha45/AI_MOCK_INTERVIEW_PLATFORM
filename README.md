@@ -3,7 +3,7 @@
 > A full-stack AI-powered mock interview platform designed to simulate real interview experiences, evaluate candidate responses, and provide actionable performance feedback.
 
 <p align="center">
-  <img src="https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=white" />
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=white" />
   <img src="https://img.shields.io/badge/Node.js-Express-339933?style=for-the-badge&logo=node.js&logoColor=white" />
   <img src="https://img.shields.io/badge/MongoDB-Database-47A248?style=for-the-badge&logo=mongodb&logoColor=white" />
   <img src="https://img.shields.io/badge/Vite-Fast%20Build-646CFF?style=for-the-badge&logo=vite&logoColor=white" />
@@ -24,7 +24,7 @@ https://github.com/harshitkushwaha45/AI_MOCK_INTERVIEW_PLATFORM
 
 ## 📌 Overview
 
-The **AI Mock Interview Platform** is a full-stack web application that provides users with an interactive environment to practice **HR and Technical interviews**.
+The **AI Mock Interview Platform** is a full-stack web application that provides users with an interactive environment to practice **HR, Technical, and Resume-based interviews**.
 
 The platform follows a complete interview workflow:
 
@@ -58,45 +58,31 @@ Users can practice different types of interviews, including:
 
 * HR Interviews
 * Technical Interviews
-* Category-based question selection
+* Resume-Based Interviews
 * Structured interview flow
 
 ---
 
 ### 📝 Dynamic Question System
 
-* Questions are retrieved dynamically through backend REST APIs.
-* Questions are categorized according to the selected interview type.
-* Users answer questions one by one.
+* Questions are generated dynamically through backend REST APIs (with built-in fallback questions).
+* Questions are tailored to the selected interview type or uploaded resume.
+* Users answer questions one by one at their own pace.
 * Interview responses are processed after submission.
-
----
-
-### ⏱️ Timed Interview Experience
-
-The interview environment includes a **question-based timer** to simulate real interview pressure.
-
-* Countdown timer
-* Automatic question progression
-* Time-based answer handling
-* Structured interview flow
 
 ---
 
 ### 🤖 AI-Based Answer Evaluation
 
-The platform evaluates submitted answers using an AI/mock feedback system.
+The platform evaluates submitted answers using **Gemini** or **OpenAI** (with an automatic rule-based fallback if an AI provider is unavailable).
 
-For each response, users can receive:
+For each response, users receive:
 
 * Answer evaluation
 * Score
-* Strengths
-* Weaknesses
+* Summary strengths and weaknesses
 * Improvement suggestions
-* Question-specific feedback
-
-> The current project uses a mock feedback system, with real AI integration planned for future development.
+* Skill-level analytics across sessions
 
 ---
 
@@ -117,7 +103,7 @@ Charts are implemented using **Chart.js**.
 
 ### 💾 Interview Result Storage
 
-Interview results can be maintained on the client side using **Local Storage**, allowing users to retain their interview performance during the application session.
+Interview results are persisted in **MongoDB** per authenticated user and cached locally during the session for immediate review.
 
 ---
 
@@ -145,12 +131,12 @@ The architecture supports generating interview questions according to:
 
 * Interview category
 * Technical domain
-* Candidate requirements
+* Candidate resume contents
 * Interview type
 
 ### AI Answer Evaluation
 
-Candidate answers can be evaluated using structured evaluation criteria such as:
+Candidate answers are evaluated using structured evaluation criteria such as:
 
 ```text
 Answer
@@ -166,7 +152,7 @@ Improvement Suggestions
 
 ### AI Feedback
 
-The feedback system focuses on providing meaningful information rather than only returning a numerical score.
+The feedback system focuses on providing actionable guidance and skill breakdowns rather than only returning a numerical score.
 
 ---
 
@@ -192,7 +178,7 @@ The feedback system focuses on providing meaningful information rather than only
 | Node.js    | Backend runtime             |
 | Express.js | REST API framework          |
 | REST APIs  | Client-server communication |
-| Multer     | File upload handling        |
+| Multer     | In-memory PDF upload handling |
 | pdf-parse  | Resume/PDF text extraction  |
 | JWT        | Authentication architecture |
 
@@ -206,7 +192,7 @@ The feedback system focuses on providing meaningful information rather than only
 
 | Technology     | Purpose                            |
 | -------------- | ---------------------------------- |
-| OpenAI API     | AI-powered evaluation architecture |
+| Gemini / OpenAI API | AI-powered question & answer evaluation |
 | TensorFlow.js  | Browser-based machine learning     |
 | face-api.js    | Facial feature analysis            |
 | Web Speech API | Speech recognition                 |
@@ -220,7 +206,7 @@ The project also includes browser-based computer vision functionality using:
 * **face-api.js**
 * **TensorFlow.js**
 
-The system can process facial information through the browser and is designed to support interview analysis such as:
+The system processes facial information through the browser to support interview presence analysis such as:
 
 * Face detection
 * Facial landmarks
@@ -239,7 +225,7 @@ Supported expression categories include:
 
 # 🎙️ Speech-Based Interview Support
 
-The platform also includes speech-processing functionality using the browser's **Web Speech API**.
+The platform includes speech-processing functionality using the browser's **Web Speech API**.
 
 The system can convert spoken responses into text, allowing users to answer interview questions through voice instead of only typing.
 
@@ -261,16 +247,16 @@ Feedback
 
 The platform includes resume-processing functionality using:
 
-* **Multer** for file uploads
+* **Multer** for in-memory file uploads
 * **pdf-parse** for extracting text from PDF resumes
 
-This architecture allows candidate information to be extracted from uploaded resumes and used as a foundation for personalized interview experiences.
+This architecture extracts candidate information from uploaded PDF resumes to generate resume review feedback and personalized interview questions.
 
 ---
 
 # 🔐 Authentication
 
-The backend architecture includes authentication functionality using:
+The backend includes authentication functionality using:
 
 * JWT-based authentication
 * Login/Register APIs
@@ -283,41 +269,27 @@ The backend architecture includes authentication functionality using:
 
 The application follows a RESTful API architecture.
 
-Example API structure:
-
 ```text
 /api
 │
 ├── /auth
-│   ├── register
-│   └── login
+│   ├── POST /register
+│   └── POST /login
 │
 ├── /questions
-│   └── ?category=technical
+│   └── GET /?category=technical
 │
-└── /interview
-    └── /feedback
-```
-
-### Example Workflow
-
-```text
-React Frontend
-      │
-      │ HTTP Request
-      ↓
-Express Server
-      │
-      ├── Authentication
-      ├── Question API
-      ├── Interview API
-      └── Feedback API
-      │
-      ↓
-Response
-      │
-      ↓
-React UI
+├── /resume
+│   ├── POST /upload
+│   └── POST /generate-questions
+│
+├── /interview
+│   └── POST /feedback
+│
+└── /results
+    ├── GET /
+    ├── GET /analytics/skills
+    └── GET /:id
 ```
 
 ---
@@ -332,23 +304,26 @@ AI_MOCK_INTERVIEW_PLATFORM/
 │   │   ├── components/
 │   │   ├── pages/
 │   │   ├── hooks/
-│   │   ├── services/
+│   │   ├── utils/
 │   │   └── ...
 │   ├── public/
 │   ├── package.json
 │   └── vite.config.js
 │
 ├── server/
+│   ├── config/
 │   ├── routes/
 │   ├── controllers/
 │   ├── models/
 │   ├── middleware/
-│   ├── uploads/
+│   ├── services/
+│   ├── data/
 │   ├── server.js
 │   └── package.json
 │
-├── README.md
-└── ...
+├── render.yaml
+├── package.json
+└── README.md
 ```
 
 ---
@@ -391,15 +366,17 @@ npm run dev
 
 # 🔑 Environment Variables
 
-Create a `.env` file inside the server directory.
+Create a `.env` file inside the `server` directory.
 
 Example:
 
 ```env
 PORT=5000
-MONGODB_URI=your_mongodb_connection_string
+MONGO_URI=your_mongodb_connection_string
 JWT_SECRET=your_jwt_secret
-OPENAI_API_KEY=your_api_key
+AI_PROVIDER=gemini
+GEMINI_API_KEY=your_gemini_api_key
+OPENAI_API_KEY=your_openai_api_key
 ```
 
 > Never commit `.env` files or API keys to GitHub.
@@ -414,8 +391,8 @@ OPENAI_API_KEY=your_api_key
                     └────────┬─────────┘
                              ↓
                   ┌─────────────────────┐
+                  │ Upload Resume /     │
                   │ Select Interview    │
-                  │ HR / Technical      │
                   └──────────┬──────────┘
                              ↓
                   ┌─────────────────────┐
@@ -446,17 +423,10 @@ OPENAI_API_KEY=your_api_key
 
 The project can be further enhanced with:
 
-* Fully integrated real-time AI evaluation
-* Personalized questions based on uploaded resumes
-* Advanced interview analytics
-* Persistent interview history
-* PDF performance reports
-* Improved emotion analysis
-* Advanced speech analysis
-* Personalized interview difficulty
-* RAG-based interview question generation
-* Vector database integration
-* Interview recommendation system
+* PDF performance report exports
+* Expanded interview domains and difficulty levels
+* RAG-based question generation with vector search
+* Multi-language speech support
 
 ---
 

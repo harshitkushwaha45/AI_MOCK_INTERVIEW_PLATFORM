@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { authFetch, readJson } from "../api";
 import SkillAnalyticsChart from "../components/SkillAnalyticsChart";
 import { SKILL_LABELS } from "../utils/skillLabels";
@@ -9,11 +9,16 @@ const getScoreTone = (score) => {
   return "danger";
 };
 
-function Dashboard({ onSelect }) {
+function Dashboard({ onSelect, onAuthExpired }) {
   const [results, setResults] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const onAuthExpiredRef = useRef(onAuthExpired);
+
+  useEffect(() => {
+    onAuthExpiredRef.current = onAuthExpired;
+  }, [onAuthExpired]);
   const averageScore = results.length
     ? (
         results.reduce(
@@ -38,6 +43,17 @@ function Dashboard({ onSelect }) {
           authFetch("/api/results"),
           authFetch("/api/results/analytics/skills"),
         ]);
+
+        if (
+          resultsRes.status === 401 ||
+          resultsRes.status === 403 ||
+          analyticsRes.status === 401 ||
+          analyticsRes.status === 403
+        ) {
+          onAuthExpiredRef.current?.();
+          return;
+        }
+
         const resultsData = await readJson(resultsRes);
         const analyticsData = await readJson(analyticsRes);
 
